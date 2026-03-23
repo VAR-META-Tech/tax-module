@@ -77,14 +77,17 @@ func (r *InvoiceRepo) Update(ctx context.Context, invoice *domain.Invoice) error
 		UPDATE invoices SET
 			customer_name=$1, customer_tax_id=$2, customer_address=$3,
 			currency=$4, total_amount=$5, tax_amount=$6, net_amount=$7,
-			notes=$8, issued_at=$9, due_at=$10, metadata=$11, updated_at=$12
-		WHERE id = $13`
+			notes=$8, issued_at=$9, due_at=$10, metadata=$11, updated_at=$12,
+			external_id=$13, completed_at=$14, retry_count=$15, last_error=$16
+		WHERE id = $17`
 
 	tag, err := r.pool.Exec(ctx, query,
 		invoice.CustomerName, invoice.CustomerTaxID, invoice.CustomerAddress,
 		invoice.Currency, invoice.TotalAmount, invoice.TaxAmount, invoice.NetAmount,
 		invoice.Notes, invoice.IssuedAt, invoice.DueAt,
-		invoice.Metadata, invoice.UpdatedAt, invoice.ID,
+		invoice.Metadata, invoice.UpdatedAt,
+		invoice.ExternalID, invoice.CompletedAt, invoice.RetryCount, invoice.LastError,
+		invoice.ID,
 	)
 	if err != nil {
 		return domain.NewInternalError("failed to update invoice", err)
