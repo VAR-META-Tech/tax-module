@@ -28,12 +28,12 @@ func MapInvoiceToViettel(invoice *domain.Invoice, cfg config.ThirdPartyConfig) *
 			AdjustmentType:    "1", // original invoice
 			PaymentStatus:     true,
 			InvoiceIssuedDate: &now,
-			InvoiceNote:       invoice.Notes,
+			InvoiceNote:       derefStr(invoice.Notes),
 		},
 		BuyerInfo: BuyerInfo{
 			BuyerLegalName:   invoice.CustomerName,
-			BuyerTaxCode:     invoice.CustomerTaxID,
-			BuyerAddressLine: invoice.CustomerAddress,
+			BuyerTaxCode:     derefStr(invoice.CustomerTaxID),
+			BuyerAddressLine: derefStr(invoice.CustomerAddress),
 		},
 		Payments: []Payment{
 			{PaymentMethodName: "TM/CK"},
@@ -101,4 +101,11 @@ func buildTaxBreakdowns(items []*domain.InvoiceItem) []TaxBreakdown {
 
 func float64Ptr(v float64) *float64 {
 	return &v
+}
+
+func derefStr(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }

@@ -20,13 +20,13 @@ func TestMapInvoiceToViettel(t *testing.T) {
 	invoice := &domain.Invoice{
 		ID:              uuid.New(),
 		CustomerName:    "Cong ty ABC",
-		CustomerTaxID:   "0123456789",
-		CustomerAddress: "123 Nguyen Hue, HCM",
+		CustomerTaxID:   strPtr("0123456789"),
+		CustomerAddress: strPtr("123 Nguyen Hue, HCM"),
 		Currency:        "VND",
 		TotalAmount:     11000,
 		TaxAmount:       1000,
 		NetAmount:       10000,
-		Notes:           "Test invoice",
+		Notes:           strPtr("Test invoice"),
 		Items: []*domain.InvoiceItem{
 			{
 				ID:          uuid.New(),
@@ -162,3 +162,5 @@ func TestMapInvoiceToViettel_TimestampFormat(t *testing.T) {
 		t.Errorf("InvoiceIssuedDate timestamp diff = %d ms, expected < 1000 ms", diff)
 	}
 }
+
+func strPtr(s string) *string { return &s }

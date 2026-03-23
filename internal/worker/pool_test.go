@@ -185,7 +185,7 @@ func TestPool_PublishInvoice(t *testing.T) {
 	pub.mu.Unlock()
 
 	updated, _ := repo.GetByID(context.Background(), invID)
-	if updated.ExternalID == "" {
+	if updated.ExternalID == nil || *updated.ExternalID == "" {
 		t.Error("ExternalID should not be empty after publish")
 	}
 }

@@ -164,7 +164,7 @@ func (p *Pool) handlePublish(ctx context.Context, invoiceID uuid.UUID, log *zero
 		return
 	}
 
-	invoice.ExternalID = externalID
+	invoice.ExternalID = &externalID
 	now := time.Now()
 	invoice.CompletedAt = &now
 	invoice.UpdatedAt = now
@@ -193,7 +193,8 @@ func (p *Pool) handlePublish(ctx context.Context, invoiceID uuid.UUID, log *zero
 
 func (p *Pool) handlePublishError(ctx context.Context, invoice *domain.Invoice, publishErr error, log *zerolog.Logger) {
 	invoice.RetryCount++
-	invoice.LastError = publishErr.Error()
+	errMsg := publishErr.Error()
+	invoice.LastError = &errMsg
 	invoice.UpdatedAt = time.Now()
 	_ = p.repo.Update(ctx, invoice)
 
@@ -215,12 +216,12 @@ func (p *Pool) handlePoll(ctx context.Context, invoiceID uuid.UUID, log *zerolog
 		return
 	}
 
-	if invoice.ExternalID == "" {
+	if invoice.ExternalID == nil || *invoice.ExternalID == "" {
 		log.Warn().Msg("Invoice has no external ID, skipping poll")
 		return
 	}
 
-	status, rawResponse, err := p.publisher.QueryStatus(ctx, invoice.ExternalID)
+	status, rawResponse, err := p.publisher.QueryStatus(ctx, *invoice.ExternalID)
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to query invoice status")
 		return
@@ -269,7 +270,7 @@ func (p *Pool) pollPendingInvoices(ctx context.Context) {
 
 	for _, inv := range invoices {
 		jobType := JobPublishInvoice
-		if inv.ExternalID != "" {
+		if inv.ExternalID != nil && *inv.ExternalID != "" {
 			jobType = JobPollStatus
 		}
 
