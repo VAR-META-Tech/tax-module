@@ -1,15 +1,4 @@
 services:
-  app:
-    build: .
-    ports:
-      - "${SERVER_PORT:-8080}:8080"
-    env_file:
-      - .env
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: unless-stopped
-
   postgres:
     image: postgres:16-alpine
     environment:
@@ -25,6 +14,35 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
+
+  migrate:
+    image: migrate/migrate:v4.18.3
+    volumes:
+      - ./internal/repository/postgres/migrations:/migrations
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command:
+      [
+        "-path", "/migrations",
+        "-database", "postgres://${DB_USER:-taxmodule}:${DB_PASSWORD:-secret}@postgres:5432/${DB_NAME:-tax_module}?sslmode=disable",
+        "up"
+      ]
+
+  app:
+    build: .
+    ports:
+      - "${SERVER_PORT:-8080}:8080"
+    env_file:
+      - .env
+    environment:
+      DB_HOST: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
 
 volumes:

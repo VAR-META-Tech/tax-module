@@ -1,0 +1,76 @@
+package domain
+
+import (
+	"context"
+	"time"
+
+	"github.com/google/uuid"
+)
+
+// InvoiceRepository defines data access for invoices.
+type InvoiceRepository interface {
+	// Invoice CRUD
+	Create(ctx context.Context, invoice *Invoice) error
+	GetByID(ctx context.Context, id uuid.UUID) (*Invoice, error)
+	Update(ctx context.Context, invoice *Invoice) error
+	UpdateStatus(ctx context.Context, id uuid.UUID, status InvoiceStatus, reason string) error
+	List(ctx context.Context, filter InvoiceFilter) ([]*Invoice, int64, error)
+	GetByExternalID(ctx context.Context, externalID string) (*Invoice, error)
+	GetPendingPolling(ctx context.Context, limit int) ([]*Invoice, error)
+
+	// Items
+	AddItem(ctx context.Context, item *InvoiceItem) error
+	GetItemsByInvoiceID(ctx context.Context, invoiceID uuid.UUID) ([]*InvoiceItem, error)
+	DeleteItem(ctx context.Context, itemID uuid.UUID) error
+
+	// Status history
+	AddStatusHistory(ctx context.Context, history *InvoiceStatusHistory) error
+	GetStatusHistory(ctx context.Context, invoiceID uuid.UUID) ([]*InvoiceStatusHistory, error)
+
+	// Audit
+	AddAuditLog(ctx context.Context, log *AuditLog) error
+}
+
+// InvoiceFilter holds query parameters for listing invoices.
+type InvoiceFilter struct {
+	Status   *InvoiceStatus
+	FromDate *time.Time
+	ToDate   *time.Time
+	Limit    int
+	Offset   int
+}
+
+// --- Placeholder types until Part 4 defines full domain entities ---
+
+type InvoiceStatus string
+
+const (
+	StatusDraft      InvoiceStatus = "draft"
+	StatusSubmitted  InvoiceStatus = "submitted"
+	StatusProcessing InvoiceStatus = "processing"
+	StatusCompleted  InvoiceStatus = "completed"
+	StatusFailed     InvoiceStatus = "failed"
+	StatusCancelled  InvoiceStatus = "cancelled"
+)
+
+type Invoice struct {
+	ID         uuid.UUID
+	ExternalID string
+	Status     InvoiceStatus
+}
+
+type InvoiceItem struct {
+	ID        uuid.UUID
+	InvoiceID uuid.UUID
+}
+
+type InvoiceStatusHistory struct {
+	ID        uuid.UUID
+	InvoiceID uuid.UUID
+}
+
+type AuditLog struct {
+	ID         uuid.UUID
+	EntityType string
+	EntityID   uuid.UUID
+}

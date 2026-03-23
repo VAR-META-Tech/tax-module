@@ -13,6 +13,7 @@ import (
 	"tax-module/internal/config"
 	"tax-module/internal/handler"
 	"tax-module/internal/logger"
+	"tax-module/internal/repository"
 )
 
 func main() {
@@ -31,7 +32,14 @@ func main() {
 
 	log := logger.New(cfg.Log)
 
-	// TODO: Initialize DB connection (Part 3)
+	// Database
+	ctx := context.Background()
+	dbPool, err := repository.NewPostgresPool(ctx, cfg.Database, &log)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to connect to database")
+	}
+	defer dbPool.Close()
+
 	// TODO: Initialize services (Part 4)
 	// TODO: Initialize worker pool (Part 7)
 
@@ -58,15 +66,15 @@ func main() {
 
 	log.Info().Msg("Shutting down server...")
 
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.Server.WriteTimeout)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.Server.WriteTimeout)
 	defer cancel()
 
-	if err := server.Shutdown(ctx); err != nil {
+	if err := server.Shutdown(shutdownCtx); err != nil {
 		log.Fatal().Err(err).Msg("server forced shutdown")
 	}
 
 	// TODO: Shutdown worker pool (Part 7)
-	// TODO: Close DB connection (Part 3)
+	dbPool.Close()
 
 	log.Info().Msg("Server is gracefully stopped")
 }
