@@ -174,6 +174,15 @@ func (s *InvoiceService) SubmitInvoice(ctx context.Context, id uuid.UUID) error 
 		return domain.NewValidationError("invoice must have at least one item before submitting")
 	}
 
+	// Generate a stable transactionUuid for idempotent Viettel API calls.
+	// This UUID is reused across retries to prevent duplicate invoices.
+	txnUuid := uuid.New().String()
+	existing.TransactionUuid = &txnUuid
+	existing.UpdatedAt = time.Now()
+	if err := s.repo.Update(ctx, existing); err != nil {
+		return err
+	}
+
 	now := time.Now()
 	if err := s.repo.UpdateStatus(ctx, id, domain.StatusSubmitted, "submitted via API"); err != nil {
 		return err

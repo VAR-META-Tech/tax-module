@@ -45,6 +45,7 @@ func (s InvoiceStatus) CanTransitionTo(target InvoiceStatus) bool {
 type Invoice struct {
 	ID              uuid.UUID      `json:"id"`
 	ExternalID      *string        `json:"external_id,omitempty"`
+	TransactionUuid *string        `json:"transaction_uuid,omitempty"`
 	Status          InvoiceStatus  `json:"status"`
 	CustomerName    string         `json:"customer_name"`
 	CustomerTaxID   *string        `json:"customer_tax_id,omitempty"`

@@ -17,8 +17,10 @@ func TestMapInvoiceToViettel(t *testing.T) {
 		InvoiceSeries: "AA/22E",
 	}
 
+	txnUuid := uuid.New().String()
 	invoice := &domain.Invoice{
 		ID:              uuid.New(),
+		TransactionUuid: &txnUuid,
 		CustomerName:    "Cong ty ABC",
 		CustomerTaxID:   strPtr("0123456789"),
 		CustomerAddress: strPtr("123 Nguyen Hue, HCM"),
@@ -45,11 +47,8 @@ func TestMapInvoiceToViettel(t *testing.T) {
 	if result.GeneralInvoiceInfo.InvoiceType != "1" {
 		t.Errorf("InvoiceType = %q, want %q", result.GeneralInvoiceInfo.InvoiceType, "1")
 	}
-	if result.GeneralInvoiceInfo.TransactionUuid == "" {
-		t.Error("TransactionUuid should not be empty")
-	}
-	if _, err := uuid.Parse(result.GeneralInvoiceInfo.TransactionUuid); err != nil {
-		t.Errorf("TransactionUuid is not a valid UUID: %v", err)
+	if result.GeneralInvoiceInfo.TransactionUuid != txnUuid {
+		t.Errorf("TransactionUuid = %q, want %q (should reuse invoice's TransactionUuid)", result.GeneralInvoiceInfo.TransactionUuid, txnUuid)
 	}
 	if result.GeneralInvoiceInfo.CurrencyCode != "VND" {
 		t.Errorf("CurrencyCode = %q, want %q", result.GeneralInvoiceInfo.CurrencyCode, "VND")
@@ -112,6 +111,39 @@ func TestMapInvoiceToViettel_EmptyItems(t *testing.T) {
 	result := MapInvoiceToViettel(invoice, cfg)
 	if len(result.ItemInfo) != 0 {
 		t.Errorf("ItemInfo count = %d, want 0", len(result.ItemInfo))
+	}
+}
+
+func TestMapInvoiceToViettel_FallbackUuid(t *testing.T) {
+	cfg := config.ThirdPartyConfig{InvoiceType: "1"}
+	// No TransactionUuid set — mapper should generate a new one as fallback.
+	invoice := &domain.Invoice{ID: uuid.New(), Currency: "VND", Items: []*domain.InvoiceItem{}}
+	result := MapInvoiceToViettel(invoice, cfg)
+	if result.GeneralInvoiceInfo.TransactionUuid == "" {
+		t.Error("TransactionUuid should be generated as fallback when not set on invoice")
+	}
+	if _, err := uuid.Parse(result.GeneralInvoiceInfo.TransactionUuid); err != nil {
+		t.Errorf("Fallback TransactionUuid is not a valid UUID: %v", err)
+	}
+}
+
+func TestMapInvoiceToViettel_ReusesUuid(t *testing.T) {
+	cfg := config.ThirdPartyConfig{InvoiceType: "1"}
+	txnUuid := "550e8400-e29b-41d4-a716-446655440000"
+	invoice := &domain.Invoice{
+		ID: uuid.New(), Currency: "VND",
+		TransactionUuid: &txnUuid,
+		Items:           []*domain.InvoiceItem{},
+	}
+
+	// Call mapper twice — should return the same UUID both times (idempotent).
+	r1 := MapInvoiceToViettel(invoice, cfg)
+	r2 := MapInvoiceToViettel(invoice, cfg)
+	if r1.GeneralInvoiceInfo.TransactionUuid != txnUuid {
+		t.Errorf("First call TransactionUuid = %q, want %q", r1.GeneralInvoiceInfo.TransactionUuid, txnUuid)
+	}
+	if r2.GeneralInvoiceInfo.TransactionUuid != txnUuid {
+		t.Errorf("Second call TransactionUuid = %q, want %q", r2.GeneralInvoiceInfo.TransactionUuid, txnUuid)
 	}
 }
 
