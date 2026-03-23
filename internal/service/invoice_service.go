@@ -10,14 +10,20 @@ import (
 	"tax-module/internal/domain"
 )
 
+// JobEnqueuer is the interface for enqueuing async work.
+type JobEnqueuer interface {
+	Enqueue(invoiceID uuid.UUID) error
+}
+
 type InvoiceService struct {
 	repo      domain.InvoiceRepository
 	publisher domain.InvoicePublisher
+	enqueuer  JobEnqueuer
 	log       *zerolog.Logger
 }
 
-func NewInvoiceService(repo domain.InvoiceRepository, publisher domain.InvoicePublisher, log *zerolog.Logger) *InvoiceService {
-	return &InvoiceService{repo: repo, publisher: publisher, log: log}
+func NewInvoiceService(repo domain.InvoiceRepository, publisher domain.InvoicePublisher, enqueuer JobEnqueuer, log *zerolog.Logger) *InvoiceService {
+	return &InvoiceService{repo: repo, publisher: publisher, enqueuer: enqueuer, log: log}
 }
 
 func (s *InvoiceService) CreateDraft(ctx context.Context, invoice *domain.Invoice) error {
@@ -183,41 +189,13 @@ func (s *InvoiceService) SubmitInvoice(ctx context.Context, id uuid.UUID) error 
 		CreatedAt:  now,
 	})
 
-	// Transition to processing and call Viettel
-	if err := s.repo.UpdateStatus(ctx, id, domain.StatusProcessing, "sending to viettel"); err != nil {
+	// Enqueue async job to publish invoice to Viettel
+	if err := s.enqueuer.Enqueue(id); err != nil {
+		s.log.Error().Err(err).Str("invoice_id", id.String()).Msg("Failed to enqueue invoice publish job")
 		return err
 	}
 
-	invoice, err := s.repo.GetByID(ctx, id)
-	if err != nil {
-		return err
-	}
-	invoice.Items = items
-
-	externalID, err := s.publisher.CreateInvoice(ctx, invoice)
-	if err != nil {
-		_ = s.repo.UpdateStatus(ctx, id, domain.StatusFailed, err.Error())
-		s.log.Error().Err(err).Str("invoice_id", id.String()).Msg("Failed to publish invoice to Viettel")
-		return err
-	}
-
-	// Store external ID and mark completed
-	invoice.ExternalID = externalID
-	nowComplete := time.Now()
-	invoice.CompletedAt = &nowComplete
-	invoice.UpdatedAt = nowComplete
-	if err := s.repo.Update(ctx, invoice); err != nil {
-		return err
-	}
-
-	if err := s.repo.UpdateStatus(ctx, id, domain.StatusCompleted, "published to viettel"); err != nil {
-		return err
-	}
-
-	s.log.Info().
-		Str("invoice_id", id.String()).
-		Str("external_id", externalID).
-		Msg("Invoice published to Viettel")
+	s.log.Info().Str("invoice_id", id.String()).Msg("Invoice submitted, enqueued for publishing")
 	return nil
 }
 
