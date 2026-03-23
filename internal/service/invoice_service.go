@@ -75,12 +75,32 @@ func (s *InvoiceService) UpdateInvoice(ctx context.Context, id uuid.UUID, invoic
 		return domain.NewValidationError("can only update invoices in draft status")
 	}
 
+	exchangeRateChanged := existing.ExchangeRate != invoice.ExchangeRate
+
 	invoice.ID = id
 	invoice.Status = existing.Status
 	invoice.CreatedAt = existing.CreatedAt
 	invoice.UpdatedAt = time.Now()
 
-	return s.repo.Update(ctx, invoice)
+	// Preserve financial totals (will be recalculated if rate changed)
+	invoice.TotalAmount = existing.TotalAmount
+	invoice.TaxAmount = existing.TaxAmount
+	invoice.NetAmount = existing.NetAmount
+	invoice.OriginalTotalAmount = existing.OriginalTotalAmount
+	invoice.OriginalTaxAmount = existing.OriginalTaxAmount
+	invoice.OriginalNetAmount = existing.OriginalNetAmount
+
+	if err := s.repo.Update(ctx, invoice); err != nil {
+		return err
+	}
+
+	if exchangeRateChanged {
+		if err := s.reconvertItems(ctx, id, invoice.ExchangeRate); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (s *InvoiceService) CancelInvoice(ctx context.Context, id uuid.UUID, reason string) error {
@@ -111,6 +131,7 @@ func (s *InvoiceService) CancelInvoice(ctx context.Context, id uuid.UUID, reason
 }
 
 // AddItem adds a line item to an invoice and recalculates totals.
+// The incoming UnitPrice is in the invoice's original currency.
 func (s *InvoiceService) AddItem(ctx context.Context, invoiceID uuid.UUID, item *domain.InvoiceItem) error {
 	existing, err := s.repo.GetByID(ctx, invoiceID)
 	if err != nil {
@@ -122,9 +143,22 @@ func (s *InvoiceService) AddItem(ctx context.Context, invoiceID uuid.UUID, item 
 
 	item.ID = uuid.New()
 	item.InvoiceID = invoiceID
-	item.TaxAmount = item.UnitPrice * item.Quantity * item.TaxRate / 100
-	item.LineTotal = item.UnitPrice*item.Quantity + item.TaxAmount
 	item.CreatedAt = time.Now()
+
+	// Compute amounts in original currency
+	originalUnitPrice := item.UnitPrice
+	originalTaxAmount := originalUnitPrice * item.Quantity * item.TaxRate / 100
+	originalLineTotal := originalUnitPrice*item.Quantity + originalTaxAmount
+
+	item.OriginalUnitPrice = originalUnitPrice
+	item.OriginalTaxAmount = originalTaxAmount
+	item.OriginalLineTotal = originalLineTotal
+
+	// Convert to VND using invoice exchange rate
+	rate := existing.ExchangeRate
+	item.UnitPrice = originalUnitPrice * rate
+	item.TaxAmount = originalTaxAmount * rate
+	item.LineTotal = originalLineTotal * rate
 
 	if err := s.repo.AddItem(ctx, item); err != nil {
 		return err
@@ -216,9 +250,12 @@ func (s *InvoiceService) recalculateTotals(ctx context.Context, invoiceID uuid.U
 	}
 
 	var totalAmount, taxAmount float64
+	var originalTotalAmount, originalTaxAmount float64
 	for _, item := range items {
 		totalAmount += item.LineTotal
 		taxAmount += item.TaxAmount
+		originalTotalAmount += item.OriginalLineTotal
+		originalTaxAmount += item.OriginalTaxAmount
 	}
 
 	invoice, err := s.repo.GetByID(ctx, invoiceID)
@@ -229,7 +266,29 @@ func (s *InvoiceService) recalculateTotals(ctx context.Context, invoiceID uuid.U
 	invoice.TotalAmount = totalAmount
 	invoice.TaxAmount = taxAmount
 	invoice.NetAmount = totalAmount - taxAmount
+	invoice.OriginalTotalAmount = originalTotalAmount
+	invoice.OriginalTaxAmount = originalTaxAmount
+	invoice.OriginalNetAmount = originalTotalAmount - originalTaxAmount
 	invoice.UpdatedAt = time.Now()
 
 	return s.repo.Update(ctx, invoice)
+}
+
+// reconvertItems recalculates VND amounts for all items when exchange rate changes.
+func (s *InvoiceService) reconvertItems(ctx context.Context, invoiceID uuid.UUID, newRate float64) error {
+	items, err := s.repo.GetItemsByInvoiceID(ctx, invoiceID)
+	if err != nil {
+		return err
+	}
+
+	for _, item := range items {
+		item.UnitPrice = item.OriginalUnitPrice * newRate
+		item.TaxAmount = item.OriginalTaxAmount * newRate
+		item.LineTotal = item.OriginalLineTotal * newRate
+		if err := s.repo.UpdateItem(ctx, item); err != nil {
+			return err
+		}
+	}
+
+	return s.recalculateTotals(ctx, invoiceID)
 }

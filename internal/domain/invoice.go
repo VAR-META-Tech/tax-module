@@ -48,13 +48,19 @@ type Invoice struct {
 	TransactionUuid *string        `json:"transaction_uuid,omitempty"`
 	Status          InvoiceStatus  `json:"status"`
 	CustomerName    string         `json:"customer_name"`
-	CustomerTaxID   *string        `json:"customer_tax_id,omitempty"`
-	CustomerAddress *string        `json:"customer_address,omitempty"`
-	Currency        string         `json:"currency"`
-	TotalAmount     float64        `json:"total_amount"`
-	TaxAmount       float64        `json:"tax_amount"`
-	NetAmount       float64        `json:"net_amount"`
-	Notes           *string        `json:"notes,omitempty"`
+	CustomerTaxID   string         `json:"customer_tax_id,omitempty"`
+	CustomerAddress string         `json:"customer_address,omitempty"`
+	Currency            string         `json:"currency"`
+	OriginalCurrency    string         `json:"original_currency"`
+	ExchangeRate        float64        `json:"exchange_rate"`
+	TotalAmount         float64        `json:"total_amount"`
+	TaxAmount           float64        `json:"tax_amount"`
+	NetAmount           float64        `json:"net_amount"`
+	OriginalTotalAmount float64        `json:"original_total_amount"`
+	OriginalTaxAmount   float64        `json:"original_tax_amount"`
+	OriginalNetAmount   float64        `json:"original_net_amount"`
+	TransactionHash     string         `json:"transaction_hash,omitempty"`
+	Notes               string         `json:"notes,omitempty"`
 	IssuedAt        *time.Time     `json:"issued_at,omitempty"`
 	DueAt           *time.Time     `json:"due_at,omitempty"`
 	SubmittedAt     *time.Time     `json:"submitted_at,omitempty"`
@@ -75,9 +81,12 @@ type InvoiceItem struct {
 	Quantity    float64   `json:"quantity"`
 	UnitPrice   float64   `json:"unit_price"`
 	TaxRate     float64   `json:"tax_rate"`
-	TaxAmount   float64   `json:"tax_amount"`
-	LineTotal   float64   `json:"line_total"`
-	SortOrder   int       `json:"sort_order"`
+	TaxAmount         float64   `json:"tax_amount"`
+	LineTotal         float64   `json:"line_total"`
+	OriginalUnitPrice float64   `json:"original_unit_price"`
+	OriginalTaxAmount float64   `json:"original_tax_amount"`
+	OriginalLineTotal float64   `json:"original_line_total"`
+	SortOrder         int       `json:"sort_order"`
 	CreatedAt   time.Time `json:"created_at"`
 }
 

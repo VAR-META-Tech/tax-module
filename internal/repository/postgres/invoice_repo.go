@@ -29,16 +29,20 @@ func NewInvoiceRepo(pool *pgxpool.Pool, log *zerolog.Logger) *InvoiceRepo {
 
 func (r *InvoiceRepo) Create(ctx context.Context, invoice *domain.Invoice) error {
 	query := `
-		INSERT INTO invoices (id, external_id, transaction_uuid, status, customer_name, customer_tax_id,
-			customer_address, currency, total_amount, tax_amount, net_amount,
-			notes, issued_at, due_at, metadata, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`
+		INSERT INTO invoices (id, external_id, status, customer_name, customer_tax_id,
+			customer_address, currency, original_currency, exchange_rate,
+			total_amount, tax_amount, net_amount,
+			original_total_amount, original_tax_amount, original_net_amount,
+			transaction_hash, notes, issued_at, due_at, metadata, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)`
 
 	_, err := r.pool.Exec(ctx, query,
 		invoice.ID, invoice.ExternalID, invoice.TransactionUuid, invoice.Status,
 		invoice.CustomerName, invoice.CustomerTaxID, invoice.CustomerAddress,
-		invoice.Currency, invoice.TotalAmount, invoice.TaxAmount, invoice.NetAmount,
-		invoice.Notes, invoice.IssuedAt, invoice.DueAt,
+		invoice.Currency, invoice.OriginalCurrency, invoice.ExchangeRate,
+		invoice.TotalAmount, invoice.TaxAmount, invoice.NetAmount,
+		invoice.OriginalTotalAmount, invoice.OriginalTaxAmount, invoice.OriginalNetAmount,
+		invoice.TransactionHash, invoice.Notes, invoice.IssuedAt, invoice.DueAt,
 		invoice.Metadata, invoice.CreatedAt, invoice.UpdatedAt,
 	)
 	if err != nil {
@@ -49,9 +53,11 @@ func (r *InvoiceRepo) Create(ctx context.Context, invoice *domain.Invoice) error
 
 func (r *InvoiceRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Invoice, error) {
 	query := `
-		SELECT id, external_id, transaction_uuid, status, customer_name, customer_tax_id,
-			customer_address, currency, total_amount, tax_amount, net_amount,
-			notes, issued_at, due_at, submitted_at, completed_at,
+		SELECT id, external_id, status, customer_name, customer_tax_id,
+			customer_address, currency, original_currency, exchange_rate,
+			total_amount, tax_amount, net_amount,
+			original_total_amount, original_tax_amount, original_net_amount,
+			transaction_hash, notes, issued_at, due_at, submitted_at, completed_at,
 			retry_count, last_error, metadata, created_at, updated_at
 		FROM invoices WHERE id = $1`
 
@@ -59,8 +65,10 @@ func (r *InvoiceRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Invoic
 	err := r.pool.QueryRow(ctx, query, id).Scan(
 		&inv.ID, &inv.ExternalID, &inv.TransactionUuid, &inv.Status,
 		&inv.CustomerName, &inv.CustomerTaxID, &inv.CustomerAddress,
-		&inv.Currency, &inv.TotalAmount, &inv.TaxAmount, &inv.NetAmount,
-		&inv.Notes, &inv.IssuedAt, &inv.DueAt, &inv.SubmittedAt, &inv.CompletedAt,
+		&inv.Currency, &inv.OriginalCurrency, &inv.ExchangeRate,
+		&inv.TotalAmount, &inv.TaxAmount, &inv.NetAmount,
+		&inv.OriginalTotalAmount, &inv.OriginalTaxAmount, &inv.OriginalNetAmount,
+		&inv.TransactionHash, &inv.Notes, &inv.IssuedAt, &inv.DueAt, &inv.SubmittedAt, &inv.CompletedAt,
 		&inv.RetryCount, &inv.LastError, &inv.Metadata, &inv.CreatedAt, &inv.UpdatedAt,
 	)
 	if err != nil {
@@ -76,20 +84,19 @@ func (r *InvoiceRepo) Update(ctx context.Context, invoice *domain.Invoice) error
 	query := `
 		UPDATE invoices SET
 			customer_name=$1, customer_tax_id=$2, customer_address=$3,
-			currency=$4, total_amount=$5, tax_amount=$6, net_amount=$7,
-			notes=$8, issued_at=$9, due_at=$10, metadata=$11, updated_at=$12,
-			external_id=$13, completed_at=$14, retry_count=$15, last_error=$16,
-			transaction_uuid=$17
-		WHERE id = $18`
+			currency=$4, original_currency=$5, exchange_rate=$6,
+			total_amount=$7, tax_amount=$8, net_amount=$9,
+			original_total_amount=$10, original_tax_amount=$11, original_net_amount=$12,
+			transaction_hash=$13, notes=$14, issued_at=$15, due_at=$16, metadata=$17, updated_at=$18
+		WHERE id = $19`
 
 	tag, err := r.pool.Exec(ctx, query,
 		invoice.CustomerName, invoice.CustomerTaxID, invoice.CustomerAddress,
-		invoice.Currency, invoice.TotalAmount, invoice.TaxAmount, invoice.NetAmount,
-		invoice.Notes, invoice.IssuedAt, invoice.DueAt,
-		invoice.Metadata, invoice.UpdatedAt,
-		invoice.ExternalID, invoice.CompletedAt, invoice.RetryCount, invoice.LastError,
-		invoice.TransactionUuid,
-		invoice.ID,
+		invoice.Currency, invoice.OriginalCurrency, invoice.ExchangeRate,
+		invoice.TotalAmount, invoice.TaxAmount, invoice.NetAmount,
+		invoice.OriginalTotalAmount, invoice.OriginalTaxAmount, invoice.OriginalNetAmount,
+		invoice.TransactionHash, invoice.Notes, invoice.IssuedAt, invoice.DueAt,
+		invoice.Metadata, invoice.UpdatedAt, invoice.ID,
 	)
 	if err != nil {
 		return domain.NewInternalError("failed to update invoice", err)
@@ -167,9 +174,11 @@ func (r *InvoiceRepo) List(ctx context.Context, filter domain.InvoiceFilter) ([]
 
 	// Fetch page
 	dataQuery := fmt.Sprintf(
-		`SELECT id, external_id, transaction_uuid, status, customer_name, customer_tax_id,
-			customer_address, currency, total_amount, tax_amount, net_amount,
-			notes, issued_at, due_at, submitted_at, completed_at,
+		`SELECT id, external_id, status, customer_name, customer_tax_id,
+			customer_address, currency, original_currency, exchange_rate,
+			total_amount, tax_amount, net_amount,
+			original_total_amount, original_tax_amount, original_net_amount,
+			transaction_hash, notes, issued_at, due_at, submitted_at, completed_at,
 			retry_count, last_error, metadata, created_at, updated_at
 		FROM invoices%s ORDER BY created_at DESC LIMIT $%d OFFSET $%d`,
 		where, argIdx, argIdx+1,
@@ -188,8 +197,10 @@ func (r *InvoiceRepo) List(ctx context.Context, filter domain.InvoiceFilter) ([]
 		if err := rows.Scan(
 			&inv.ID, &inv.ExternalID, &inv.TransactionUuid, &inv.Status,
 			&inv.CustomerName, &inv.CustomerTaxID, &inv.CustomerAddress,
-			&inv.Currency, &inv.TotalAmount, &inv.TaxAmount, &inv.NetAmount,
-			&inv.Notes, &inv.IssuedAt, &inv.DueAt, &inv.SubmittedAt, &inv.CompletedAt,
+			&inv.Currency, &inv.OriginalCurrency, &inv.ExchangeRate,
+			&inv.TotalAmount, &inv.TaxAmount, &inv.NetAmount,
+			&inv.OriginalTotalAmount, &inv.OriginalTaxAmount, &inv.OriginalNetAmount,
+			&inv.TransactionHash, &inv.Notes, &inv.IssuedAt, &inv.DueAt, &inv.SubmittedAt, &inv.CompletedAt,
 			&inv.RetryCount, &inv.LastError, &inv.Metadata, &inv.CreatedAt, &inv.UpdatedAt,
 		); err != nil {
 			return nil, 0, domain.NewInternalError("failed to scan invoice", err)
@@ -202,9 +213,11 @@ func (r *InvoiceRepo) List(ctx context.Context, filter domain.InvoiceFilter) ([]
 
 func (r *InvoiceRepo) GetByExternalID(ctx context.Context, externalID string) (*domain.Invoice, error) {
 	query := `
-		SELECT id, external_id, transaction_uuid, status, customer_name, customer_tax_id,
-			customer_address, currency, total_amount, tax_amount, net_amount,
-			notes, issued_at, due_at, submitted_at, completed_at,
+		SELECT id, external_id, status, customer_name, customer_tax_id,
+			customer_address, currency, original_currency, exchange_rate,
+			total_amount, tax_amount, net_amount,
+			original_total_amount, original_tax_amount, original_net_amount,
+			transaction_hash, notes, issued_at, due_at, submitted_at, completed_at,
 			retry_count, last_error, metadata, created_at, updated_at
 		FROM invoices WHERE external_id = $1`
 
@@ -212,8 +225,10 @@ func (r *InvoiceRepo) GetByExternalID(ctx context.Context, externalID string) (*
 	err := r.pool.QueryRow(ctx, query, externalID).Scan(
 		&inv.ID, &inv.ExternalID, &inv.TransactionUuid, &inv.Status,
 		&inv.CustomerName, &inv.CustomerTaxID, &inv.CustomerAddress,
-		&inv.Currency, &inv.TotalAmount, &inv.TaxAmount, &inv.NetAmount,
-		&inv.Notes, &inv.IssuedAt, &inv.DueAt, &inv.SubmittedAt, &inv.CompletedAt,
+		&inv.Currency, &inv.OriginalCurrency, &inv.ExchangeRate,
+		&inv.TotalAmount, &inv.TaxAmount, &inv.NetAmount,
+		&inv.OriginalTotalAmount, &inv.OriginalTaxAmount, &inv.OriginalNetAmount,
+		&inv.TransactionHash, &inv.Notes, &inv.IssuedAt, &inv.DueAt, &inv.SubmittedAt, &inv.CompletedAt,
 		&inv.RetryCount, &inv.LastError, &inv.Metadata, &inv.CreatedAt, &inv.UpdatedAt,
 	)
 	if err != nil {
@@ -227,9 +242,11 @@ func (r *InvoiceRepo) GetByExternalID(ctx context.Context, externalID string) (*
 
 func (r *InvoiceRepo) GetPendingPolling(ctx context.Context, limit int) ([]*domain.Invoice, error) {
 	query := `
-		SELECT id, external_id, transaction_uuid, status, customer_name, customer_tax_id,
-			customer_address, currency, total_amount, tax_amount, net_amount,
-			notes, issued_at, due_at, submitted_at, completed_at,
+		SELECT id, external_id, status, customer_name, customer_tax_id,
+			customer_address, currency, original_currency, exchange_rate,
+			total_amount, tax_amount, net_amount,
+			original_total_amount, original_tax_amount, original_net_amount,
+			transaction_hash, notes, issued_at, due_at, submitted_at, completed_at,
 			retry_count, last_error, metadata, created_at, updated_at
 		FROM invoices
 		WHERE status IN ('submitted', 'processing')
@@ -248,8 +265,10 @@ func (r *InvoiceRepo) GetPendingPolling(ctx context.Context, limit int) ([]*doma
 		if err := rows.Scan(
 			&inv.ID, &inv.ExternalID, &inv.TransactionUuid, &inv.Status,
 			&inv.CustomerName, &inv.CustomerTaxID, &inv.CustomerAddress,
-			&inv.Currency, &inv.TotalAmount, &inv.TaxAmount, &inv.NetAmount,
-			&inv.Notes, &inv.IssuedAt, &inv.DueAt, &inv.SubmittedAt, &inv.CompletedAt,
+			&inv.Currency, &inv.OriginalCurrency, &inv.ExchangeRate,
+			&inv.TotalAmount, &inv.TaxAmount, &inv.NetAmount,
+			&inv.OriginalTotalAmount, &inv.OriginalTaxAmount, &inv.OriginalNetAmount,
+			&inv.TransactionHash, &inv.Notes, &inv.IssuedAt, &inv.DueAt, &inv.SubmittedAt, &inv.CompletedAt,
 			&inv.RetryCount, &inv.LastError, &inv.Metadata, &inv.CreatedAt, &inv.UpdatedAt,
 		); err != nil {
 			return nil, domain.NewInternalError("failed to scan invoice", err)
@@ -264,12 +283,16 @@ func (r *InvoiceRepo) GetPendingPolling(ctx context.Context, limit int) ([]*doma
 func (r *InvoiceRepo) AddItem(ctx context.Context, item *domain.InvoiceItem) error {
 	query := `
 		INSERT INTO invoice_items (id, invoice_id, description, quantity, unit_price,
-			tax_rate, tax_amount, line_total, sort_order, created_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`
+			tax_rate, tax_amount, line_total,
+			original_unit_price, original_tax_amount, original_line_total,
+			sort_order, created_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`
 
 	_, err := r.pool.Exec(ctx, query,
 		item.ID, item.InvoiceID, item.Description, item.Quantity, item.UnitPrice,
-		item.TaxRate, item.TaxAmount, item.LineTotal, item.SortOrder, item.CreatedAt,
+		item.TaxRate, item.TaxAmount, item.LineTotal,
+		item.OriginalUnitPrice, item.OriginalTaxAmount, item.OriginalLineTotal,
+		item.SortOrder, item.CreatedAt,
 	)
 	if err != nil {
 		return domain.NewInternalError("failed to add item", err)
@@ -277,10 +300,33 @@ func (r *InvoiceRepo) AddItem(ctx context.Context, item *domain.InvoiceItem) err
 	return nil
 }
 
+func (r *InvoiceRepo) UpdateItem(ctx context.Context, item *domain.InvoiceItem) error {
+	query := `
+		UPDATE invoice_items SET
+			unit_price=$1, tax_amount=$2, line_total=$3,
+			original_unit_price=$4, original_tax_amount=$5, original_line_total=$6
+		WHERE id = $7`
+
+	tag, err := r.pool.Exec(ctx, query,
+		item.UnitPrice, item.TaxAmount, item.LineTotal,
+		item.OriginalUnitPrice, item.OriginalTaxAmount, item.OriginalLineTotal,
+		item.ID,
+	)
+	if err != nil {
+		return domain.NewInternalError("failed to update item", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.NewNotFoundError("item not found")
+	}
+	return nil
+}
+
 func (r *InvoiceRepo) GetItemsByInvoiceID(ctx context.Context, invoiceID uuid.UUID) ([]*domain.InvoiceItem, error) {
 	query := `
 		SELECT id, invoice_id, description, quantity, unit_price,
-			tax_rate, tax_amount, line_total, sort_order, created_at
+			tax_rate, tax_amount, line_total,
+			original_unit_price, original_tax_amount, original_line_total,
+			sort_order, created_at
 		FROM invoice_items WHERE invoice_id = $1
 		ORDER BY sort_order, created_at`
 
@@ -295,7 +341,9 @@ func (r *InvoiceRepo) GetItemsByInvoiceID(ctx context.Context, invoiceID uuid.UU
 		var item domain.InvoiceItem
 		if err := rows.Scan(
 			&item.ID, &item.InvoiceID, &item.Description, &item.Quantity, &item.UnitPrice,
-			&item.TaxRate, &item.TaxAmount, &item.LineTotal, &item.SortOrder, &item.CreatedAt,
+			&item.TaxRate, &item.TaxAmount, &item.LineTotal,
+			&item.OriginalUnitPrice, &item.OriginalTaxAmount, &item.OriginalLineTotal,
+			&item.SortOrder, &item.CreatedAt,
 		); err != nil {
 			return nil, domain.NewInternalError("failed to scan item", err)
 		}

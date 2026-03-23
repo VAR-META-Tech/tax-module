@@ -3,23 +3,29 @@ package dto
 // --- Invoice requests ---
 
 type CreateInvoiceRequest struct {
-	CustomerName    string  `json:"customer_name" binding:"required,max=255"`
-	CustomerTaxID   string  `json:"customer_tax_id" binding:"max=50"`
-	CustomerAddress string  `json:"customer_address"`
-	Currency        string  `json:"currency" binding:"required,len=3"`
-	Notes           string  `json:"notes"`
-	IssuedAt        *string `json:"issued_at"`
-	DueAt           *string `json:"due_at"`
+	CustomerName     string   `json:"customer_name" binding:"required,max=255"`
+	CustomerTaxID    string   `json:"customer_tax_id" binding:"max=50"`
+	CustomerAddress  string   `json:"customer_address"`
+	Currency         string   `json:"currency" binding:"required,len=3"`
+	OriginalCurrency string   `json:"original_currency" binding:"required,max=10"`
+	ExchangeRate     *float64 `json:"exchange_rate"`
+	TransactionHash  string   `json:"transaction_hash" binding:"max=255"`
+	Notes            string   `json:"notes"`
+	IssuedAt         *string  `json:"issued_at"`
+	DueAt            *string  `json:"due_at"`
 }
 
 type UpdateInvoiceRequest struct {
-	CustomerName    string  `json:"customer_name" binding:"required,max=255"`
-	CustomerTaxID   string  `json:"customer_tax_id" binding:"max=50"`
-	CustomerAddress string  `json:"customer_address"`
-	Currency        string  `json:"currency" binding:"required,len=3"`
-	Notes           string  `json:"notes"`
-	IssuedAt        *string `json:"issued_at"`
-	DueAt           *string `json:"due_at"`
+	CustomerName     string   `json:"customer_name" binding:"required,max=255"`
+	CustomerTaxID    string   `json:"customer_tax_id" binding:"max=50"`
+	CustomerAddress  string   `json:"customer_address"`
+	Currency         string   `json:"currency" binding:"required,len=3"`
+	OriginalCurrency string   `json:"original_currency" binding:"required,max=10"`
+	ExchangeRate     *float64 `json:"exchange_rate"`
+	TransactionHash  string   `json:"transaction_hash" binding:"max=255"`
+	Notes            string   `json:"notes"`
+	IssuedAt         *string  `json:"issued_at"`
+	DueAt            *string  `json:"due_at"`
 }
 
 type CancelInvoiceRequest struct {

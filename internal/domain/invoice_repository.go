@@ -20,6 +20,7 @@ type InvoiceRepository interface {
 
 	// Items
 	AddItem(ctx context.Context, item *InvoiceItem) error
+	UpdateItem(ctx context.Context, item *InvoiceItem) error
 	GetItemsByInvoiceID(ctx context.Context, invoiceID uuid.UUID) ([]*InvoiceItem, error)
 	DeleteItem(ctx context.Context, itemID uuid.UUID) error
 

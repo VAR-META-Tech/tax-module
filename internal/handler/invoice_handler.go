@@ -31,12 +31,29 @@ func (h *InvoiceHandler) CreateInvoice(c *gin.Context) {
 		return
 	}
 
+	if req.OriginalCurrency != "VND" && req.OriginalCurrency != "HBAR" {
+		c.JSON(http.StatusBadRequest, dto.ErrorResponse("VALIDATION_ERROR", "original_currency must be VND or HBAR"))
+		return
+	}
+
+	exchangeRate := 1.0
+	if req.OriginalCurrency == "HBAR" {
+		if req.ExchangeRate == nil || *req.ExchangeRate <= 0 {
+			c.JSON(http.StatusBadRequest, dto.ErrorResponse("VALIDATION_ERROR", "exchange_rate is required and must be > 0 when original_currency is HBAR"))
+			return
+		}
+		exchangeRate = *req.ExchangeRate
+	}
+
 	invoice := &domain.Invoice{
-		CustomerName:    req.CustomerName,
-		CustomerTaxID:   &req.CustomerTaxID,
-		CustomerAddress: &req.CustomerAddress,
-		Currency:        req.Currency,
-		Notes:           &req.Notes,
+		CustomerName:     req.CustomerName,
+		CustomerTaxID:    req.CustomerTaxID,
+		CustomerAddress:  req.CustomerAddress,
+		Currency:         "VND",
+		OriginalCurrency: req.OriginalCurrency,
+		ExchangeRate:     exchangeRate,
+		TransactionHash:  req.TransactionHash,
+		Notes:            req.Notes,
 	}
 	if req.IssuedAt != nil {
 		if t, err := time.Parse(time.RFC3339, *req.IssuedAt); err == nil {
@@ -124,12 +141,29 @@ func (h *InvoiceHandler) UpdateInvoice(c *gin.Context) {
 		return
 	}
 
+	if req.OriginalCurrency != "VND" && req.OriginalCurrency != "HBAR" {
+		c.JSON(http.StatusBadRequest, dto.ErrorResponse("VALIDATION_ERROR", "original_currency must be VND or HBAR"))
+		return
+	}
+
+	exchangeRate := 1.0
+	if req.OriginalCurrency == "HBAR" {
+		if req.ExchangeRate == nil || *req.ExchangeRate <= 0 {
+			c.JSON(http.StatusBadRequest, dto.ErrorResponse("VALIDATION_ERROR", "exchange_rate is required and must be > 0 when original_currency is HBAR"))
+			return
+		}
+		exchangeRate = *req.ExchangeRate
+	}
+
 	invoice := &domain.Invoice{
-		CustomerName:    req.CustomerName,
-		CustomerTaxID:   &req.CustomerTaxID,
-		CustomerAddress: &req.CustomerAddress,
-		Currency:        req.Currency,
-		Notes:           &req.Notes,
+		CustomerName:     req.CustomerName,
+		CustomerTaxID:    req.CustomerTaxID,
+		CustomerAddress:  req.CustomerAddress,
+		Currency:         "VND",
+		OriginalCurrency: req.OriginalCurrency,
+		ExchangeRate:     exchangeRate,
+		TransactionHash:  req.TransactionHash,
+		Notes:            req.Notes,
 	}
 	if req.IssuedAt != nil {
 		if t, err := time.Parse(time.RFC3339, *req.IssuedAt); err == nil {
