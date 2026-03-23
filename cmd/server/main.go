@@ -12,6 +12,7 @@ import (
 
 	"tax-module/internal/config"
 	"tax-module/internal/handler"
+	"tax-module/internal/integration"
 	"tax-module/internal/logger"
 	"tax-module/internal/repository"
 	"tax-module/internal/repository/postgres"
@@ -44,7 +45,13 @@ func main() {
 
 	// Services
 	invoiceRepo := postgres.NewInvoiceRepo(dbPool, &log)
-	invoiceSvc := service.NewInvoiceService(invoiceRepo, &log)
+	tokenRepo := postgres.NewAccessTokenRepo(dbPool, &log)
+
+	// Viettel SInvoice integration
+	viettelClient := integration.NewViettelClient(cfg.ThirdParty, tokenRepo, &log)
+	viettelPublisher := integration.NewViettelPublisher(viettelClient, cfg.ThirdParty, &log)
+
+	invoiceSvc := service.NewInvoiceService(invoiceRepo, viettelPublisher, &log)
 	// TODO: Initialize worker pool (Part 7)
 
 	router := handler.NewRouter(&log, dbPool, invoiceSvc)

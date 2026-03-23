@@ -11,12 +11,13 @@ import (
 )
 
 type InvoiceService struct {
-	repo domain.InvoiceRepository
-	log  *zerolog.Logger
+	repo      domain.InvoiceRepository
+	publisher domain.InvoicePublisher
+	log       *zerolog.Logger
 }
 
-func NewInvoiceService(repo domain.InvoiceRepository, log *zerolog.Logger) *InvoiceService {
-	return &InvoiceService{repo: repo, log: log}
+func NewInvoiceService(repo domain.InvoiceRepository, publisher domain.InvoicePublisher, log *zerolog.Logger) *InvoiceService {
+	return &InvoiceService{repo: repo, publisher: publisher, log: log}
 }
 
 func (s *InvoiceService) CreateDraft(ctx context.Context, invoice *domain.Invoice) error {
@@ -182,8 +183,41 @@ func (s *InvoiceService) SubmitInvoice(ctx context.Context, id uuid.UUID) error 
 		CreatedAt:  now,
 	})
 
-	// TODO Part 4.2: Enqueue worker job to call 3rd party Vinvoice API
-	s.log.Info().Str("invoice_id", id.String()).Msg("Invoice submitted, pending 3rd party integration")
+	// Transition to processing and call Viettel
+	if err := s.repo.UpdateStatus(ctx, id, domain.StatusProcessing, "sending to viettel"); err != nil {
+		return err
+	}
+
+	invoice, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	invoice.Items = items
+
+	externalID, err := s.publisher.CreateInvoice(ctx, invoice)
+	if err != nil {
+		_ = s.repo.UpdateStatus(ctx, id, domain.StatusFailed, err.Error())
+		s.log.Error().Err(err).Str("invoice_id", id.String()).Msg("Failed to publish invoice to Viettel")
+		return err
+	}
+
+	// Store external ID and mark completed
+	invoice.ExternalID = externalID
+	nowComplete := time.Now()
+	invoice.CompletedAt = &nowComplete
+	invoice.UpdatedAt = nowComplete
+	if err := s.repo.Update(ctx, invoice); err != nil {
+		return err
+	}
+
+	if err := s.repo.UpdateStatus(ctx, id, domain.StatusCompleted, "published to viettel"); err != nil {
+		return err
+	}
+
+	s.log.Info().
+		Str("invoice_id", id.String()).
+		Str("external_id", externalID).
+		Msg("Invoice published to Viettel")
 	return nil
 }
 
