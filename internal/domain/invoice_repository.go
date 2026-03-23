@@ -39,38 +39,3 @@ type InvoiceFilter struct {
 	Limit    int
 	Offset   int
 }
-
-// --- Placeholder types until Part 4 defines full domain entities ---
-
-type InvoiceStatus string
-
-const (
-	StatusDraft      InvoiceStatus = "draft"
-	StatusSubmitted  InvoiceStatus = "submitted"
-	StatusProcessing InvoiceStatus = "processing"
-	StatusCompleted  InvoiceStatus = "completed"
-	StatusFailed     InvoiceStatus = "failed"
-	StatusCancelled  InvoiceStatus = "cancelled"
-)
-
-type Invoice struct {
-	ID         uuid.UUID
-	ExternalID string
-	Status     InvoiceStatus
-}
-
-type InvoiceItem struct {
-	ID        uuid.UUID
-	InvoiceID uuid.UUID
-}
-
-type InvoiceStatusHistory struct {
-	ID        uuid.UUID
-	InvoiceID uuid.UUID
-}
-
-type AuditLog struct {
-	ID         uuid.UUID
-	EntityType string
-	EntityID   uuid.UUID
-}

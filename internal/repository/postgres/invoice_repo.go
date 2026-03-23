@@ -2,9 +2,13 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
 
@@ -24,59 +28,340 @@ func NewInvoiceRepo(pool *pgxpool.Pool, log *zerolog.Logger) *InvoiceRepo {
 // --- Invoice CRUD ---
 
 func (r *InvoiceRepo) Create(ctx context.Context, invoice *domain.Invoice) error {
-	return fmt.Errorf("not implemented") // TODO: Part 4
+	query := `
+		INSERT INTO invoices (id, external_id, status, customer_name, customer_tax_id,
+			customer_address, currency, total_amount, tax_amount, net_amount,
+			notes, issued_at, due_at, metadata, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`
+
+	_, err := r.pool.Exec(ctx, query,
+		invoice.ID, invoice.ExternalID, invoice.Status,
+		invoice.CustomerName, invoice.CustomerTaxID, invoice.CustomerAddress,
+		invoice.Currency, invoice.TotalAmount, invoice.TaxAmount, invoice.NetAmount,
+		invoice.Notes, invoice.IssuedAt, invoice.DueAt,
+		invoice.Metadata, invoice.CreatedAt, invoice.UpdatedAt,
+	)
+	if err != nil {
+		return domain.NewInternalError("failed to create invoice", err)
+	}
+	return nil
 }
 
 func (r *InvoiceRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Invoice, error) {
-	return nil, fmt.Errorf("not implemented") // TODO: Part 4
+	query := `
+		SELECT id, external_id, status, customer_name, customer_tax_id,
+			customer_address, currency, total_amount, tax_amount, net_amount,
+			notes, issued_at, due_at, submitted_at, completed_at,
+			retry_count, last_error, metadata, created_at, updated_at
+		FROM invoices WHERE id = $1`
+
+	var inv domain.Invoice
+	err := r.pool.QueryRow(ctx, query, id).Scan(
+		&inv.ID, &inv.ExternalID, &inv.Status,
+		&inv.CustomerName, &inv.CustomerTaxID, &inv.CustomerAddress,
+		&inv.Currency, &inv.TotalAmount, &inv.TaxAmount, &inv.NetAmount,
+		&inv.Notes, &inv.IssuedAt, &inv.DueAt, &inv.SubmittedAt, &inv.CompletedAt,
+		&inv.RetryCount, &inv.LastError, &inv.Metadata, &inv.CreatedAt, &inv.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.NewNotFoundError("invoice not found")
+		}
+		return nil, domain.NewInternalError("failed to get invoice", err)
+	}
+	return &inv, nil
 }
 
 func (r *InvoiceRepo) Update(ctx context.Context, invoice *domain.Invoice) error {
-	return fmt.Errorf("not implemented") // TODO: Part 4
+	query := `
+		UPDATE invoices SET
+			customer_name=$1, customer_tax_id=$2, customer_address=$3,
+			currency=$4, total_amount=$5, tax_amount=$6, net_amount=$7,
+			notes=$8, issued_at=$9, due_at=$10, metadata=$11, updated_at=$12
+		WHERE id = $13`
+
+	tag, err := r.pool.Exec(ctx, query,
+		invoice.CustomerName, invoice.CustomerTaxID, invoice.CustomerAddress,
+		invoice.Currency, invoice.TotalAmount, invoice.TaxAmount, invoice.NetAmount,
+		invoice.Notes, invoice.IssuedAt, invoice.DueAt,
+		invoice.Metadata, invoice.UpdatedAt, invoice.ID,
+	)
+	if err != nil {
+		return domain.NewInternalError("failed to update invoice", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.NewNotFoundError("invoice not found")
+	}
+	return nil
 }
 
 func (r *InvoiceRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status domain.InvoiceStatus, reason string) error {
-	return fmt.Errorf("not implemented") // TODO: Part 4
+	query := `UPDATE invoices SET status=$1, last_error=$2, updated_at=$3`
+
+	args := []interface{}{status, reason, time.Now()}
+	argIdx := 4
+
+	if status == domain.StatusSubmitted {
+		query += fmt.Sprintf(", submitted_at=$%d", argIdx)
+		now := time.Now()
+		args = append(args, now)
+		argIdx++
+	}
+	if status == domain.StatusCompleted {
+		query += fmt.Sprintf(", completed_at=$%d", argIdx)
+		now := time.Now()
+		args = append(args, now)
+		argIdx++
+	}
+
+	query += fmt.Sprintf(" WHERE id=$%d", argIdx)
+	args = append(args, id)
+
+	tag, err := r.pool.Exec(ctx, query, args...)
+	if err != nil {
+		return domain.NewInternalError("failed to update status", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.NewNotFoundError("invoice not found")
+	}
+	return nil
 }
 
 func (r *InvoiceRepo) List(ctx context.Context, filter domain.InvoiceFilter) ([]*domain.Invoice, int64, error) {
-	return nil, 0, fmt.Errorf("not implemented") // TODO: Part 4
+	var conditions []string
+	var args []interface{}
+	argIdx := 1
+
+	if filter.Status != nil {
+		conditions = append(conditions, fmt.Sprintf("status = $%d", argIdx))
+		args = append(args, *filter.Status)
+		argIdx++
+	}
+	if filter.FromDate != nil {
+		conditions = append(conditions, fmt.Sprintf("created_at >= $%d", argIdx))
+		args = append(args, *filter.FromDate)
+		argIdx++
+	}
+	if filter.ToDate != nil {
+		conditions = append(conditions, fmt.Sprintf("created_at <= $%d", argIdx))
+		args = append(args, *filter.ToDate)
+		argIdx++
+	}
+
+	where := ""
+	if len(conditions) > 0 {
+		where = " WHERE " + strings.Join(conditions, " AND ")
+	}
+
+	// Count total
+	countQuery := "SELECT COUNT(*) FROM invoices" + where
+	var total int64
+	if err := r.pool.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, domain.NewInternalError("failed to count invoices", err)
+	}
+
+	// Fetch page
+	dataQuery := fmt.Sprintf(
+		`SELECT id, external_id, status, customer_name, customer_tax_id,
+			customer_address, currency, total_amount, tax_amount, net_amount,
+			notes, issued_at, due_at, submitted_at, completed_at,
+			retry_count, last_error, metadata, created_at, updated_at
+		FROM invoices%s ORDER BY created_at DESC LIMIT $%d OFFSET $%d`,
+		where, argIdx, argIdx+1,
+	)
+	args = append(args, filter.Limit, filter.Offset)
+
+	rows, err := r.pool.Query(ctx, dataQuery, args...)
+	if err != nil {
+		return nil, 0, domain.NewInternalError("failed to list invoices", err)
+	}
+	defer rows.Close()
+
+	var invoices []*domain.Invoice
+	for rows.Next() {
+		var inv domain.Invoice
+		if err := rows.Scan(
+			&inv.ID, &inv.ExternalID, &inv.Status,
+			&inv.CustomerName, &inv.CustomerTaxID, &inv.CustomerAddress,
+			&inv.Currency, &inv.TotalAmount, &inv.TaxAmount, &inv.NetAmount,
+			&inv.Notes, &inv.IssuedAt, &inv.DueAt, &inv.SubmittedAt, &inv.CompletedAt,
+			&inv.RetryCount, &inv.LastError, &inv.Metadata, &inv.CreatedAt, &inv.UpdatedAt,
+		); err != nil {
+			return nil, 0, domain.NewInternalError("failed to scan invoice", err)
+		}
+		invoices = append(invoices, &inv)
+	}
+
+	return invoices, total, nil
 }
 
 func (r *InvoiceRepo) GetByExternalID(ctx context.Context, externalID string) (*domain.Invoice, error) {
-	return nil, fmt.Errorf("not implemented") // TODO: Part 4
+	query := `
+		SELECT id, external_id, status, customer_name, customer_tax_id,
+			customer_address, currency, total_amount, tax_amount, net_amount,
+			notes, issued_at, due_at, submitted_at, completed_at,
+			retry_count, last_error, metadata, created_at, updated_at
+		FROM invoices WHERE external_id = $1`
+
+	var inv domain.Invoice
+	err := r.pool.QueryRow(ctx, query, externalID).Scan(
+		&inv.ID, &inv.ExternalID, &inv.Status,
+		&inv.CustomerName, &inv.CustomerTaxID, &inv.CustomerAddress,
+		&inv.Currency, &inv.TotalAmount, &inv.TaxAmount, &inv.NetAmount,
+		&inv.Notes, &inv.IssuedAt, &inv.DueAt, &inv.SubmittedAt, &inv.CompletedAt,
+		&inv.RetryCount, &inv.LastError, &inv.Metadata, &inv.CreatedAt, &inv.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.NewNotFoundError("invoice not found for external_id: " + externalID)
+		}
+		return nil, domain.NewInternalError("failed to get invoice by external_id", err)
+	}
+	return &inv, nil
 }
 
 func (r *InvoiceRepo) GetPendingPolling(ctx context.Context, limit int) ([]*domain.Invoice, error) {
-	return nil, fmt.Errorf("not implemented") // TODO: Part 4
+	query := `
+		SELECT id, external_id, status, customer_name, customer_tax_id,
+			customer_address, currency, total_amount, tax_amount, net_amount,
+			notes, issued_at, due_at, submitted_at, completed_at,
+			retry_count, last_error, metadata, created_at, updated_at
+		FROM invoices
+		WHERE status IN ('submitted', 'processing')
+		ORDER BY updated_at ASC
+		LIMIT $1`
+
+	rows, err := r.pool.Query(ctx, query, limit)
+	if err != nil {
+		return nil, domain.NewInternalError("failed to get pending invoices", err)
+	}
+	defer rows.Close()
+
+	var invoices []*domain.Invoice
+	for rows.Next() {
+		var inv domain.Invoice
+		if err := rows.Scan(
+			&inv.ID, &inv.ExternalID, &inv.Status,
+			&inv.CustomerName, &inv.CustomerTaxID, &inv.CustomerAddress,
+			&inv.Currency, &inv.TotalAmount, &inv.TaxAmount, &inv.NetAmount,
+			&inv.Notes, &inv.IssuedAt, &inv.DueAt, &inv.SubmittedAt, &inv.CompletedAt,
+			&inv.RetryCount, &inv.LastError, &inv.Metadata, &inv.CreatedAt, &inv.UpdatedAt,
+		); err != nil {
+			return nil, domain.NewInternalError("failed to scan invoice", err)
+		}
+		invoices = append(invoices, &inv)
+	}
+	return invoices, nil
 }
 
 // --- Items ---
 
 func (r *InvoiceRepo) AddItem(ctx context.Context, item *domain.InvoiceItem) error {
-	return fmt.Errorf("not implemented") // TODO: Part 4
+	query := `
+		INSERT INTO invoice_items (id, invoice_id, description, quantity, unit_price,
+			tax_rate, tax_amount, line_total, sort_order, created_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`
+
+	_, err := r.pool.Exec(ctx, query,
+		item.ID, item.InvoiceID, item.Description, item.Quantity, item.UnitPrice,
+		item.TaxRate, item.TaxAmount, item.LineTotal, item.SortOrder, item.CreatedAt,
+	)
+	if err != nil {
+		return domain.NewInternalError("failed to add item", err)
+	}
+	return nil
 }
 
 func (r *InvoiceRepo) GetItemsByInvoiceID(ctx context.Context, invoiceID uuid.UUID) ([]*domain.InvoiceItem, error) {
-	return nil, fmt.Errorf("not implemented") // TODO: Part 4
+	query := `
+		SELECT id, invoice_id, description, quantity, unit_price,
+			tax_rate, tax_amount, line_total, sort_order, created_at
+		FROM invoice_items WHERE invoice_id = $1
+		ORDER BY sort_order, created_at`
+
+	rows, err := r.pool.Query(ctx, query, invoiceID)
+	if err != nil {
+		return nil, domain.NewInternalError("failed to get items", err)
+	}
+	defer rows.Close()
+
+	var items []*domain.InvoiceItem
+	for rows.Next() {
+		var item domain.InvoiceItem
+		if err := rows.Scan(
+			&item.ID, &item.InvoiceID, &item.Description, &item.Quantity, &item.UnitPrice,
+			&item.TaxRate, &item.TaxAmount, &item.LineTotal, &item.SortOrder, &item.CreatedAt,
+		); err != nil {
+			return nil, domain.NewInternalError("failed to scan item", err)
+		}
+		items = append(items, &item)
+	}
+	return items, nil
 }
 
 func (r *InvoiceRepo) DeleteItem(ctx context.Context, itemID uuid.UUID) error {
-	return fmt.Errorf("not implemented") // TODO: Part 4
+	tag, err := r.pool.Exec(ctx, "DELETE FROM invoice_items WHERE id = $1", itemID)
+	if err != nil {
+		return domain.NewInternalError("failed to delete item", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.NewNotFoundError("item not found")
+	}
+	return nil
 }
 
 // --- Status history ---
 
-func (r *InvoiceRepo) AddStatusHistory(ctx context.Context, history *domain.InvoiceStatusHistory) error {
-	return fmt.Errorf("not implemented") // TODO: Part 4
+func (r *InvoiceRepo) AddStatusHistory(ctx context.Context, h *domain.InvoiceStatusHistory) error {
+	query := `
+		INSERT INTO invoice_status_history (id, invoice_id, from_status, to_status, reason, changed_by, created_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7)`
+
+	_, err := r.pool.Exec(ctx, query,
+		h.ID, h.InvoiceID, h.FromStatus, h.ToStatus, h.Reason, h.ChangedBy, h.CreatedAt,
+	)
+	if err != nil {
+		return domain.NewInternalError("failed to add status history", err)
+	}
+	return nil
 }
 
 func (r *InvoiceRepo) GetStatusHistory(ctx context.Context, invoiceID uuid.UUID) ([]*domain.InvoiceStatusHistory, error) {
-	return nil, fmt.Errorf("not implemented") // TODO: Part 4
+	query := `
+		SELECT id, invoice_id, from_status, to_status, reason, changed_by, created_at
+		FROM invoice_status_history WHERE invoice_id = $1
+		ORDER BY created_at`
+
+	rows, err := r.pool.Query(ctx, query, invoiceID)
+	if err != nil {
+		return nil, domain.NewInternalError("failed to get status history", err)
+	}
+	defer rows.Close()
+
+	var history []*domain.InvoiceStatusHistory
+	for rows.Next() {
+		var h domain.InvoiceStatusHistory
+		if err := rows.Scan(&h.ID, &h.InvoiceID, &h.FromStatus, &h.ToStatus, &h.Reason, &h.ChangedBy, &h.CreatedAt); err != nil {
+			return nil, domain.NewInternalError("failed to scan status history", err)
+		}
+		history = append(history, &h)
+	}
+	return history, nil
 }
 
 // --- Audit ---
 
-func (r *InvoiceRepo) AddAuditLog(ctx context.Context, log *domain.AuditLog) error {
-	return fmt.Errorf("not implemented") // TODO: Part 4
+func (r *InvoiceRepo) AddAuditLog(ctx context.Context, a *domain.AuditLog) error {
+	query := `
+		INSERT INTO audit_logs (id, entity_type, entity_id, action, actor, old_data, new_data, request_id, ip_address, created_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`
+
+	_, err := r.pool.Exec(ctx, query,
+		a.ID, a.EntityType, a.EntityID, a.Action, a.Actor,
+		a.OldData, a.NewData, a.RequestID, a.IPAddress, a.CreatedAt,
+	)
+	if err != nil {
+		return domain.NewInternalError("failed to add audit log", err)
+	}
+	return nil
 }

@@ -14,6 +14,8 @@ import (
 	"tax-module/internal/handler"
 	"tax-module/internal/logger"
 	"tax-module/internal/repository"
+	"tax-module/internal/repository/postgres"
+	"tax-module/internal/service"
 )
 
 func main() {
@@ -40,10 +42,12 @@ func main() {
 	}
 	defer dbPool.Close()
 
-	// TODO: Initialize services (Part 4)
+	// Services
+	invoiceRepo := postgres.NewInvoiceRepo(dbPool, &log)
+	invoiceSvc := service.NewInvoiceService(invoiceRepo, &log)
 	// TODO: Initialize worker pool (Part 7)
 
-	router := handler.NewRouter(&log)
+	router := handler.NewRouter(&log, dbPool, invoiceSvc)
 
 	server := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Server.Port),

@@ -30,20 +30,20 @@ services:
         "up"
       ]
 
-  app:
-    build: .
-    ports:
-      - "${SERVER_PORT:-8080}:8080"
-    env_file:
-      - .env
-    environment:
-      DB_HOST: postgres
-    depends_on:
-      postgres:
-        condition: service_healthy
-      migrate:
-        condition: service_completed_successfully
-    restart: unless-stopped
+  # app:
+  #   build: .
+  #   ports:
+  #     - "${SERVER_PORT:-8080}:8080"
+  #   env_file:
+  #     - .env
+  #   environment:
+  #     DB_HOST: postgres
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     migrate:
+  #       condition: service_completed_successfully
+  #   restart: unless-stopped
 
 volumes:
   pgdata:
