@@ -144,7 +144,7 @@ func (p *Pool) handlePublish(ctx context.Context, invoiceID uuid.UUID, log *zero
 
 	// Allow invoices that are freshly submitted, or already in processing but missing an ExternalID
 	isSubmitted := invoice.Status == domain.StatusSubmitted
-	isRecoverableProcessing := invoice.Status == domain.StatusProcessing && invoice.ExternalID == ""
+	isRecoverableProcessing := invoice.Status == domain.StatusProcessing && (invoice.ExternalID == nil || *invoice.ExternalID == "")
 
 	if !isSubmitted && !isRecoverableProcessing {
 		log.Warn().
