@@ -32,13 +32,13 @@ func TestMapInvoiceToViettel(t *testing.T) {
 		ID:              uuid.New(),
 		TransactionUuid: &txnUuid,
 		CustomerName:    "Cong ty ABC",
-		CustomerTaxID:   strPtr("0123456789"),
-		CustomerAddress: strPtr("123 Nguyen Hue, HCM"),
+		CustomerTaxID:   "0123456789",
+		CustomerAddress: "123 Nguyen Hue, HCM",
 		Currency:        "VND",
 		TotalAmount:     11000,
 		TaxAmount:       1000,
 		NetAmount:       10000,
-		Notes:           strPtr("Test invoice"),
+		Notes:           "Test invoice",
 		Items: []*domain.InvoiceItem{
 			{
 				ID:          uuid.New(),
