@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 
 	"tax-module/internal/config"
 	"tax-module/internal/domain"
+	"tax-module/internal/integration"
 )
 
 // JobType identifies the kind of work to perform.
@@ -203,18 +205,31 @@ func (p *Pool) handlePublish(ctx context.Context, invoiceID uuid.UUID, log *zero
 }
 
 func (p *Pool) handlePublishError(ctx context.Context, invoice *domain.Invoice, publishErr error, log *zerolog.Logger) {
-	invoice.RetryCount++
-	// Compute the next retry count locally instead of relying on repo.Update
-	retryCount := invoice.RetryCount + 1
+	// Non-retryable errors (e.g. validation / HTTP 400) should fail immediately
+	var vErr *integration.ViettelError
+	if errors.As(publishErr, &vErr) && !vErr.Retryable {
+		_ = p.repo.UpdateStatus(ctx, invoice.ID, domain.StatusFailed, "non-retryable: "+vErr.Error())
+		log.Error().
+			Str("viettel_code", string(vErr.ErrCode)).
+			Str("description", vErr.Description).
+			Msg("Invoice publish failed permanently (validation error)")
+		return
+	}
 
-	if retryCount >= p.cfg.MaxRetries {
+	invoice.RetryCount++
+	errMsg := publishErr.Error()
+	invoice.LastError = &errMsg
+	invoice.UpdatedAt = time.Now()
+	_ = p.repo.Update(ctx, invoice)
+
+	if invoice.RetryCount >= p.cfg.MaxRetries {
 		_ = p.repo.UpdateStatus(ctx, invoice.ID, domain.StatusFailed, "max retries exceeded: "+publishErr.Error())
-		log.Error().Int("retry_count", retryCount).Err(publishErr).Msg("Invoice publish failed permanently")
+		log.Error().Int("retry_count", invoice.RetryCount).Err(publishErr).Msg("Invoice publish failed permanently")
 		return
 	}
 
 	_ = p.repo.UpdateStatus(ctx, invoice.ID, domain.StatusSubmitted, "retry pending: "+publishErr.Error())
-	log.Warn().Int("retry_count", retryCount).Err(publishErr).Msg("Invoice publish failed, will retry")
+	log.Warn().Int("retry_count", invoice.RetryCount).Err(publishErr).Msg("Invoice publish failed, will retry")
 }
 
 // handlePoll checks a processing invoice's status via Viettel.
