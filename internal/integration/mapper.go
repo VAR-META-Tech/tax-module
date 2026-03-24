@@ -38,15 +38,7 @@ func MapInvoiceToViettel(invoice *domain.Invoice, cfg config.ThirdPartyConfig, s
 			InvoiceNote:       invoice.Notes,
 			Validation:        intPtr(0),
 		},
-		SellerInfo: &SellerInfo{
-			SellerLegalName:   sellerCfg.LegalName,
-			SellerTaxCode:     sellerCfg.TaxCode,
-			SellerAddressLine: sellerCfg.Address,
-			SellerPhoneNumber: sellerCfg.PhoneNumber,
-			SellerEmail:       sellerCfg.Email,
-			SellerBankName:    sellerCfg.BankName,
-			SellerBankAccount: sellerCfg.BankAccount,
-		},
+		SellerInfo: buildSellerInfo(sellerCfg),
 		BuyerInfo: BuyerInfo{
 			BuyerLegalName:   invoice.CustomerName,
 			BuyerTaxCode:     invoice.CustomerTaxID,
@@ -114,6 +106,23 @@ func buildTaxBreakdowns(items []*domain.InvoiceItem) []TaxBreakdown {
 		result = append(result, *tb)
 	}
 	return result
+}
+
+// buildSellerInfo returns a populated SellerInfo when sellerTaxCode is configured.
+// When TaxCode is empty, returns nil so that Viettel uses seller data from the HDDT portal.
+func buildSellerInfo(sellerCfg config.SellerConfig) *SellerInfo {
+	if sellerCfg.TaxCode == "" {
+		return nil
+	}
+	return &SellerInfo{
+		SellerLegalName:   sellerCfg.LegalName,
+		SellerTaxCode:     sellerCfg.TaxCode,
+		SellerAddressLine: sellerCfg.Address,
+		SellerPhoneNumber: sellerCfg.PhoneNumber,
+		SellerEmail:       sellerCfg.Email,
+		SellerBankName:    sellerCfg.BankName,
+		SellerBankAccount: sellerCfg.BankAccount,
+	}
 }
 
 func float64Ptr(v float64) *float64 {
