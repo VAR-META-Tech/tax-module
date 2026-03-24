@@ -58,7 +58,7 @@ func NewPool(
 func (p *Pool) Start(ctx context.Context) {
 	ctx, p.cancel = context.WithCancel(ctx)
 
-	for i := range p.cfg.PoolSize {
+	for i := 0; i < p.cfg.PoolSize; i++ {
 		p.wg.Add(1)
 		go p.worker(ctx, i)
 	}
