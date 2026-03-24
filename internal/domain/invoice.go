@@ -44,22 +44,23 @@ func (s InvoiceStatus) CanTransitionTo(target InvoiceStatus) bool {
 // Invoice is the main domain entity.
 type Invoice struct {
 	ID              uuid.UUID      `json:"id"`
-	ExternalID      string         `json:"external_id,omitempty"`
+	ExternalID      *string        `json:"external_id,omitempty"`
+	TransactionUuid *string        `json:"transaction_uuid,omitempty"`
 	Status          InvoiceStatus  `json:"status"`
 	CustomerName    string         `json:"customer_name"`
-	CustomerTaxID   string         `json:"customer_tax_id,omitempty"`
-	CustomerAddress string         `json:"customer_address,omitempty"`
+	CustomerTaxID   *string        `json:"customer_tax_id,omitempty"`
+	CustomerAddress *string        `json:"customer_address,omitempty"`
 	Currency        string         `json:"currency"`
 	TotalAmount     float64        `json:"total_amount"`
 	TaxAmount       float64        `json:"tax_amount"`
 	NetAmount       float64        `json:"net_amount"`
-	Notes           string         `json:"notes,omitempty"`
+	Notes           *string        `json:"notes,omitempty"`
 	IssuedAt        *time.Time     `json:"issued_at,omitempty"`
 	DueAt           *time.Time     `json:"due_at,omitempty"`
 	SubmittedAt     *time.Time     `json:"submitted_at,omitempty"`
 	CompletedAt     *time.Time     `json:"completed_at,omitempty"`
 	RetryCount      int            `json:"retry_count"`
-	LastError       string         `json:"last_error,omitempty"`
+	LastError       *string        `json:"last_error,omitempty"`
 	Metadata        []byte         `json:"metadata,omitempty"`
 	CreatedAt       time.Time      `json:"created_at"`
 	UpdatedAt       time.Time      `json:"updated_at"`

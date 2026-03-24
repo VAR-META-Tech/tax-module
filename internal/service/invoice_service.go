@@ -10,13 +10,20 @@ import (
 	"tax-module/internal/domain"
 )
 
-type InvoiceService struct {
-	repo domain.InvoiceRepository
-	log  *zerolog.Logger
+// JobEnqueuer is the interface for enqueuing async work.
+type JobEnqueuer interface {
+	Enqueue(invoiceID uuid.UUID) error
 }
 
-func NewInvoiceService(repo domain.InvoiceRepository, log *zerolog.Logger) *InvoiceService {
-	return &InvoiceService{repo: repo, log: log}
+type InvoiceService struct {
+	repo      domain.InvoiceRepository
+	publisher domain.InvoicePublisher
+	enqueuer  JobEnqueuer
+	log       *zerolog.Logger
+}
+
+func NewInvoiceService(repo domain.InvoiceRepository, publisher domain.InvoicePublisher, enqueuer JobEnqueuer, log *zerolog.Logger) *InvoiceService {
+	return &InvoiceService{repo: repo, publisher: publisher, enqueuer: enqueuer, log: log}
 }
 
 func (s *InvoiceService) CreateDraft(ctx context.Context, invoice *domain.Invoice) error {
@@ -167,6 +174,15 @@ func (s *InvoiceService) SubmitInvoice(ctx context.Context, id uuid.UUID) error 
 		return domain.NewValidationError("invoice must have at least one item before submitting")
 	}
 
+	// Generate a stable transactionUuid for idempotent Viettel API calls.
+	// This UUID is reused across retries to prevent duplicate invoices.
+	txnUuid := uuid.New().String()
+	existing.TransactionUuid = &txnUuid
+	existing.UpdatedAt = time.Now()
+	if err := s.repo.Update(ctx, existing); err != nil {
+		return err
+	}
+
 	now := time.Now()
 	if err := s.repo.UpdateStatus(ctx, id, domain.StatusSubmitted, "submitted via API"); err != nil {
 		return err
@@ -182,8 +198,13 @@ func (s *InvoiceService) SubmitInvoice(ctx context.Context, id uuid.UUID) error 
 		CreatedAt:  now,
 	})
 
-	// TODO Part 4.2: Enqueue worker job to call 3rd party Vinvoice API
-	s.log.Info().Str("invoice_id", id.String()).Msg("Invoice submitted, pending 3rd party integration")
+	// Enqueue async job to publish invoice to Viettel
+	if err := s.enqueuer.Enqueue(id); err != nil {
+		// Treat enqueue failures as non-fatal: invoice is already submitted in persistent state.
+		s.log.Error().Err(err).Str("invoice_id", id.String()).Msg("Failed to enqueue invoice publish job")
+	}
+
+	s.log.Info().Str("invoice_id", id.String()).Msg("Invoice submitted, enqueued for publishing")
 	return nil
 }
 

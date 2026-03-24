@@ -12,10 +12,12 @@ import (
 
 	"tax-module/internal/config"
 	"tax-module/internal/handler"
+	"tax-module/internal/integration"
 	"tax-module/internal/logger"
 	"tax-module/internal/repository"
 	"tax-module/internal/repository/postgres"
 	"tax-module/internal/service"
+	"tax-module/internal/worker"
 )
 
 func main() {
@@ -44,8 +46,18 @@ func main() {
 
 	// Services
 	invoiceRepo := postgres.NewInvoiceRepo(dbPool, &log)
-	invoiceSvc := service.NewInvoiceService(invoiceRepo, &log)
-	// TODO: Initialize worker pool (Part 7)
+	tokenRepo := postgres.NewAccessTokenRepo(dbPool, &log)
+
+	// Viettel SInvoice integration
+	viettelClient := integration.NewViettelClient(cfg.ThirdParty, tokenRepo, &log)
+	viettelPublisher := integration.NewViettelPublisher(viettelClient, cfg.ThirdParty, &log)
+
+	// Worker pool
+	workerPool := worker.NewPool(cfg.Worker, viettelPublisher, invoiceRepo, &log)
+	workerPool.Start(ctx)
+	enqueuer := worker.NewAdapter(workerPool)
+
+	invoiceSvc := service.NewInvoiceService(invoiceRepo, viettelPublisher, enqueuer, &log)
 
 	router := handler.NewRouter(&log, dbPool, invoiceSvc)
 
@@ -78,7 +90,7 @@ func main() {
 	}
 
 	// TODO: Shutdown worker pool (Part 7)
-	dbPool.Close()
+	workerPool.Shutdown()
 
 	log.Info().Msg("Server is gracefully stopped")
 }

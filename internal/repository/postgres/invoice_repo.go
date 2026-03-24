@@ -29,13 +29,13 @@ func NewInvoiceRepo(pool *pgxpool.Pool, log *zerolog.Logger) *InvoiceRepo {
 
 func (r *InvoiceRepo) Create(ctx context.Context, invoice *domain.Invoice) error {
 	query := `
-		INSERT INTO invoices (id, external_id, status, customer_name, customer_tax_id,
+		INSERT INTO invoices (id, external_id, transaction_uuid, status, customer_name, customer_tax_id,
 			customer_address, currency, total_amount, tax_amount, net_amount,
 			notes, issued_at, due_at, metadata, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`
 
 	_, err := r.pool.Exec(ctx, query,
-		invoice.ID, invoice.ExternalID, invoice.Status,
+		invoice.ID, invoice.ExternalID, invoice.TransactionUuid, invoice.Status,
 		invoice.CustomerName, invoice.CustomerTaxID, invoice.CustomerAddress,
 		invoice.Currency, invoice.TotalAmount, invoice.TaxAmount, invoice.NetAmount,
 		invoice.Notes, invoice.IssuedAt, invoice.DueAt,
@@ -49,7 +49,7 @@ func (r *InvoiceRepo) Create(ctx context.Context, invoice *domain.Invoice) error
 
 func (r *InvoiceRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Invoice, error) {
 	query := `
-		SELECT id, external_id, status, customer_name, customer_tax_id,
+		SELECT id, external_id, transaction_uuid, status, customer_name, customer_tax_id,
 			customer_address, currency, total_amount, tax_amount, net_amount,
 			notes, issued_at, due_at, submitted_at, completed_at,
 			retry_count, last_error, metadata, created_at, updated_at
@@ -57,7 +57,7 @@ func (r *InvoiceRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Invoic
 
 	var inv domain.Invoice
 	err := r.pool.QueryRow(ctx, query, id).Scan(
-		&inv.ID, &inv.ExternalID, &inv.Status,
+		&inv.ID, &inv.ExternalID, &inv.TransactionUuid, &inv.Status,
 		&inv.CustomerName, &inv.CustomerTaxID, &inv.CustomerAddress,
 		&inv.Currency, &inv.TotalAmount, &inv.TaxAmount, &inv.NetAmount,
 		&inv.Notes, &inv.IssuedAt, &inv.DueAt, &inv.SubmittedAt, &inv.CompletedAt,
@@ -77,14 +77,19 @@ func (r *InvoiceRepo) Update(ctx context.Context, invoice *domain.Invoice) error
 		UPDATE invoices SET
 			customer_name=$1, customer_tax_id=$2, customer_address=$3,
 			currency=$4, total_amount=$5, tax_amount=$6, net_amount=$7,
-			notes=$8, issued_at=$9, due_at=$10, metadata=$11, updated_at=$12
-		WHERE id = $13`
+			notes=$8, issued_at=$9, due_at=$10, metadata=$11, updated_at=$12,
+			external_id=$13, completed_at=$14, retry_count=$15, last_error=$16,
+			transaction_uuid=$17
+		WHERE id = $18`
 
 	tag, err := r.pool.Exec(ctx, query,
 		invoice.CustomerName, invoice.CustomerTaxID, invoice.CustomerAddress,
 		invoice.Currency, invoice.TotalAmount, invoice.TaxAmount, invoice.NetAmount,
 		invoice.Notes, invoice.IssuedAt, invoice.DueAt,
-		invoice.Metadata, invoice.UpdatedAt, invoice.ID,
+		invoice.Metadata, invoice.UpdatedAt,
+		invoice.ExternalID, invoice.CompletedAt, invoice.RetryCount, invoice.LastError,
+		invoice.TransactionUuid,
+		invoice.ID,
 	)
 	if err != nil {
 		return domain.NewInternalError("failed to update invoice", err)
@@ -162,7 +167,7 @@ func (r *InvoiceRepo) List(ctx context.Context, filter domain.InvoiceFilter) ([]
 
 	// Fetch page
 	dataQuery := fmt.Sprintf(
-		`SELECT id, external_id, status, customer_name, customer_tax_id,
+		`SELECT id, external_id, transaction_uuid, status, customer_name, customer_tax_id,
 			customer_address, currency, total_amount, tax_amount, net_amount,
 			notes, issued_at, due_at, submitted_at, completed_at,
 			retry_count, last_error, metadata, created_at, updated_at
@@ -181,7 +186,7 @@ func (r *InvoiceRepo) List(ctx context.Context, filter domain.InvoiceFilter) ([]
 	for rows.Next() {
 		var inv domain.Invoice
 		if err := rows.Scan(
-			&inv.ID, &inv.ExternalID, &inv.Status,
+			&inv.ID, &inv.ExternalID, &inv.TransactionUuid, &inv.Status,
 			&inv.CustomerName, &inv.CustomerTaxID, &inv.CustomerAddress,
 			&inv.Currency, &inv.TotalAmount, &inv.TaxAmount, &inv.NetAmount,
 			&inv.Notes, &inv.IssuedAt, &inv.DueAt, &inv.SubmittedAt, &inv.CompletedAt,
@@ -197,7 +202,7 @@ func (r *InvoiceRepo) List(ctx context.Context, filter domain.InvoiceFilter) ([]
 
 func (r *InvoiceRepo) GetByExternalID(ctx context.Context, externalID string) (*domain.Invoice, error) {
 	query := `
-		SELECT id, external_id, status, customer_name, customer_tax_id,
+		SELECT id, external_id, transaction_uuid, status, customer_name, customer_tax_id,
 			customer_address, currency, total_amount, tax_amount, net_amount,
 			notes, issued_at, due_at, submitted_at, completed_at,
 			retry_count, last_error, metadata, created_at, updated_at
@@ -205,7 +210,7 @@ func (r *InvoiceRepo) GetByExternalID(ctx context.Context, externalID string) (*
 
 	var inv domain.Invoice
 	err := r.pool.QueryRow(ctx, query, externalID).Scan(
-		&inv.ID, &inv.ExternalID, &inv.Status,
+		&inv.ID, &inv.ExternalID, &inv.TransactionUuid, &inv.Status,
 		&inv.CustomerName, &inv.CustomerTaxID, &inv.CustomerAddress,
 		&inv.Currency, &inv.TotalAmount, &inv.TaxAmount, &inv.NetAmount,
 		&inv.Notes, &inv.IssuedAt, &inv.DueAt, &inv.SubmittedAt, &inv.CompletedAt,
@@ -222,7 +227,7 @@ func (r *InvoiceRepo) GetByExternalID(ctx context.Context, externalID string) (*
 
 func (r *InvoiceRepo) GetPendingPolling(ctx context.Context, limit int) ([]*domain.Invoice, error) {
 	query := `
-		SELECT id, external_id, status, customer_name, customer_tax_id,
+		SELECT id, external_id, transaction_uuid, status, customer_name, customer_tax_id,
 			customer_address, currency, total_amount, tax_amount, net_amount,
 			notes, issued_at, due_at, submitted_at, completed_at,
 			retry_count, last_error, metadata, created_at, updated_at
@@ -241,7 +246,7 @@ func (r *InvoiceRepo) GetPendingPolling(ctx context.Context, limit int) ([]*doma
 	for rows.Next() {
 		var inv domain.Invoice
 		if err := rows.Scan(
-			&inv.ID, &inv.ExternalID, &inv.Status,
+			&inv.ID, &inv.ExternalID, &inv.TransactionUuid, &inv.Status,
 			&inv.CustomerName, &inv.CustomerTaxID, &inv.CustomerAddress,
 			&inv.Currency, &inv.TotalAmount, &inv.TaxAmount, &inv.NetAmount,
 			&inv.Notes, &inv.IssuedAt, &inv.DueAt, &inv.SubmittedAt, &inv.CompletedAt,

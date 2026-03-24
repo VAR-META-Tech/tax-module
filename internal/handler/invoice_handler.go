@@ -33,10 +33,10 @@ func (h *InvoiceHandler) CreateInvoice(c *gin.Context) {
 
 	invoice := &domain.Invoice{
 		CustomerName:    req.CustomerName,
-		CustomerTaxID:   req.CustomerTaxID,
-		CustomerAddress: req.CustomerAddress,
+		CustomerTaxID:   &req.CustomerTaxID,
+		CustomerAddress: &req.CustomerAddress,
 		Currency:        req.Currency,
-		Notes:           req.Notes,
+		Notes:           &req.Notes,
 	}
 	if req.IssuedAt != nil {
 		if t, err := time.Parse(time.RFC3339, *req.IssuedAt); err == nil {
@@ -126,10 +126,10 @@ func (h *InvoiceHandler) UpdateInvoice(c *gin.Context) {
 
 	invoice := &domain.Invoice{
 		CustomerName:    req.CustomerName,
-		CustomerTaxID:   req.CustomerTaxID,
-		CustomerAddress: req.CustomerAddress,
+		CustomerTaxID:   &req.CustomerTaxID,
+		CustomerAddress: &req.CustomerAddress,
 		Currency:        req.Currency,
-		Notes:           req.Notes,
+		Notes:           &req.Notes,
 	}
 	if req.IssuedAt != nil {
 		if t, err := time.Parse(time.RFC3339, *req.IssuedAt); err == nil {
