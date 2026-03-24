@@ -142,14 +142,23 @@ func (p *Pool) handlePublish(ctx context.Context, invoiceID uuid.UUID, log *zero
 		return
 	}
 
-	if invoice.Status != domain.StatusSubmitted {
-		log.Warn().Str("status", string(invoice.Status)).Msg("Invoice not in submitted status, skipping")
+	// Allow invoices that are freshly submitted, or already in processing but missing an ExternalID
+	isSubmitted := invoice.Status == domain.StatusSubmitted
+	isRecoverableProcessing := invoice.Status == domain.StatusProcessing && invoice.ExternalID == ""
+
+	if !isSubmitted && !isRecoverableProcessing {
+		log.Warn().
+			Str("status", string(invoice.Status)).
+			Msg("Invoice not in submitted or recoverable processing status, skipping")
 		return
 	}
 
-	if err := p.repo.UpdateStatus(ctx, invoiceID, domain.StatusProcessing, "worker: sending to viettel"); err != nil {
-		log.Error().Err(err).Msg("Failed to transition to processing")
-		return
+	// Only transition to processing if we are coming from submitted; if already processing, keep status
+	if isSubmitted {
+		if err := p.repo.UpdateStatus(ctx, invoiceID, domain.StatusProcessing, "worker: sending to viettel"); err != nil {
+			log.Error().Err(err).Msg("Failed to transition to processing")
+			return
+		}
 	}
 
 	items, err := p.repo.GetItemsByInvoiceID(ctx, invoiceID)
