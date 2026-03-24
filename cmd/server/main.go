@@ -91,7 +91,6 @@ func main() {
 
 	// TODO: Shutdown worker pool (Part 7)
 	workerPool.Shutdown()
-	dbPool.Close()
 
 	log.Info().Msg("Server is gracefully stopped")
 }
