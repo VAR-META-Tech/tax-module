@@ -200,8 +200,8 @@ func (s *InvoiceService) SubmitInvoice(ctx context.Context, id uuid.UUID) error 
 
 	// Enqueue async job to publish invoice to Viettel
 	if err := s.enqueuer.Enqueue(id); err != nil {
+		// Treat enqueue failures as non-fatal: invoice is already submitted in persistent state.
 		s.log.Error().Err(err).Str("invoice_id", id.String()).Msg("Failed to enqueue invoice publish job")
-		return err
 	}
 
 	s.log.Info().Str("invoice_id", id.String()).Msg("Invoice submitted, enqueued for publishing")
