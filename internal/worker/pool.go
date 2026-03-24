@@ -90,7 +90,9 @@ func (p *Pool) Enqueue(job Job) error {
 // Shutdown signals all workers to stop and waits for them to finish.
 func (p *Pool) Shutdown() {
 	p.log.Info().Msg("Worker pool shutting down...")
-	p.cancel()
+	if p.cancel != nil {
+		p.cancel()
+	}
 	p.wg.Wait()
 	p.log.Info().Msg("Worker pool stopped")
 }
