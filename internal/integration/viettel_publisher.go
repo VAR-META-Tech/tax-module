@@ -28,6 +28,8 @@ func (p *ViettelPublisher) CreateInvoice(ctx context.Context, invoice *domain.In
 	viettelReq := MapInvoiceToViettel(invoice, p.cfg, p.sellerCfg)
 	transactionUuid := viettelReq.GeneralInvoiceInfo.TransactionUuid
 
+	invoice.TransactionUuid = &transactionUuid
+
 	p.log.Info().
 		Str("invoice_id", invoice.ID.String()).
 		Str("transaction_uuid", transactionUuid).

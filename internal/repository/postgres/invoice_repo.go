@@ -29,12 +29,12 @@ func NewInvoiceRepo(pool *pgxpool.Pool, log *zerolog.Logger) *InvoiceRepo {
 
 func (r *InvoiceRepo) Create(ctx context.Context, invoice *domain.Invoice) error {
 	query := `
-		INSERT INTO invoices (id, external_id, status, customer_name, customer_tax_id,
+		INSERT INTO invoices (id, external_id, transaction_uuid, status, customer_name, customer_tax_id,
 			customer_address, currency, original_currency, exchange_rate,
 			total_amount, tax_amount, net_amount,
 			original_total_amount, original_tax_amount, original_net_amount,
 			transaction_hash, notes, issued_at, due_at, metadata, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)`
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)`
 
 	_, err := r.pool.Exec(ctx, query,
 		invoice.ID, invoice.ExternalID, invoice.TransactionUuid, invoice.Status,
@@ -53,7 +53,7 @@ func (r *InvoiceRepo) Create(ctx context.Context, invoice *domain.Invoice) error
 
 func (r *InvoiceRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Invoice, error) {
 	query := `
-		SELECT id, external_id, status, customer_name, customer_tax_id,
+		SELECT id, external_id, transaction_uuid, status, customer_name, customer_tax_id,
 			customer_address, currency, original_currency, exchange_rate,
 			total_amount, tax_amount, net_amount,
 			original_total_amount, original_tax_amount, original_net_amount,
@@ -83,19 +83,24 @@ func (r *InvoiceRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Invoic
 func (r *InvoiceRepo) Update(ctx context.Context, invoice *domain.Invoice) error {
 	query := `
 		UPDATE invoices SET
-			customer_name=$1, customer_tax_id=$2, customer_address=$3,
-			currency=$4, original_currency=$5, exchange_rate=$6,
-			total_amount=$7, tax_amount=$8, net_amount=$9,
-			original_total_amount=$10, original_tax_amount=$11, original_net_amount=$12,
-			transaction_hash=$13, notes=$14, issued_at=$15, due_at=$16, metadata=$17, updated_at=$18
-		WHERE id = $19`
+			external_id=$1, transaction_uuid=$2,
+			customer_name=$3, customer_tax_id=$4, customer_address=$5,
+			currency=$6, original_currency=$7, exchange_rate=$8,
+			total_amount=$9, tax_amount=$10, net_amount=$11,
+			original_total_amount=$12, original_tax_amount=$13, original_net_amount=$14,
+			transaction_hash=$15, notes=$16, issued_at=$17, due_at=$18,
+			submitted_at=$19, completed_at=$20, retry_count=$21, last_error=$22,
+			metadata=$23, updated_at=$24
+		WHERE id = $25`
 
 	tag, err := r.pool.Exec(ctx, query,
+		invoice.ExternalID, invoice.TransactionUuid,
 		invoice.CustomerName, invoice.CustomerTaxID, invoice.CustomerAddress,
 		invoice.Currency, invoice.OriginalCurrency, invoice.ExchangeRate,
 		invoice.TotalAmount, invoice.TaxAmount, invoice.NetAmount,
 		invoice.OriginalTotalAmount, invoice.OriginalTaxAmount, invoice.OriginalNetAmount,
 		invoice.TransactionHash, invoice.Notes, invoice.IssuedAt, invoice.DueAt,
+		invoice.SubmittedAt, invoice.CompletedAt, invoice.RetryCount, invoice.LastError,
 		invoice.Metadata, invoice.UpdatedAt, invoice.ID,
 	)
 	if err != nil {
@@ -174,7 +179,7 @@ func (r *InvoiceRepo) List(ctx context.Context, filter domain.InvoiceFilter) ([]
 
 	// Fetch page
 	dataQuery := fmt.Sprintf(
-		`SELECT id, external_id, status, customer_name, customer_tax_id,
+		`SELECT id, external_id, transaction_uuid, status, customer_name, customer_tax_id,
 			customer_address, currency, original_currency, exchange_rate,
 			total_amount, tax_amount, net_amount,
 			original_total_amount, original_tax_amount, original_net_amount,
@@ -213,7 +218,7 @@ func (r *InvoiceRepo) List(ctx context.Context, filter domain.InvoiceFilter) ([]
 
 func (r *InvoiceRepo) GetByExternalID(ctx context.Context, externalID string) (*domain.Invoice, error) {
 	query := `
-		SELECT id, external_id, status, customer_name, customer_tax_id,
+		SELECT id, external_id, transaction_uuid, status, customer_name, customer_tax_id,
 			customer_address, currency, original_currency, exchange_rate,
 			total_amount, tax_amount, net_amount,
 			original_total_amount, original_tax_amount, original_net_amount,
@@ -242,7 +247,7 @@ func (r *InvoiceRepo) GetByExternalID(ctx context.Context, externalID string) (*
 
 func (r *InvoiceRepo) GetPendingPolling(ctx context.Context, limit int) ([]*domain.Invoice, error) {
 	query := `
-		SELECT id, external_id, status, customer_name, customer_tax_id,
+		SELECT id, external_id, transaction_uuid, status, customer_name, customer_tax_id,
 			customer_address, currency, original_currency, exchange_rate,
 			total_amount, tax_amount, net_amount,
 			original_total_amount, original_tax_amount, original_net_amount,

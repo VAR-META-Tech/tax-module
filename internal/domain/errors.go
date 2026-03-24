@@ -39,7 +39,7 @@ func (e *AppError) Unwrap() error { return e.Err }
 // Constructor helpers
 
 func NewNotFoundError(msg string) *AppError {
-	return &AppError{Code: ErrCodeNotFound, Message: msg, HTTPStatus: http.StatusBadRequest}
+	return &AppError{Code: ErrCodeNotFound, Message: msg, HTTPStatus: http.StatusNotFound}
 }
 
 func NewValidationError(msg string) *AppError {
