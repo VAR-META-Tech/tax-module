@@ -50,7 +50,7 @@ func main() {
 
 	// Viettel SInvoice integration
 	viettelClient := integration.NewViettelClient(cfg.ThirdParty, tokenRepo, &log)
-	viettelPublisher := integration.NewViettelPublisher(viettelClient, cfg.ThirdParty, &log)
+	viettelPublisher := integration.NewViettelPublisher(viettelClient, cfg.ThirdParty, cfg.Seller, &log)
 
 	// Worker pool
 	workerPool := worker.NewPool(cfg.Worker, viettelPublisher, invoiceRepo, &log)

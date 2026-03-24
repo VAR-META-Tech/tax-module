@@ -12,7 +12,7 @@ import (
 // MapInvoiceToViettel converts a domain Invoice into a ViettelInvoiceRequest.
 // It reuses invoice.TransactionUuid for idempotent retries. Falls back to a new UUID
 // if TransactionUuid is not set (e.g., legacy invoices before this field existed).
-func MapInvoiceToViettel(invoice *domain.Invoice, cfg config.ThirdPartyConfig) *ViettelInvoiceRequest {
+func MapInvoiceToViettel(invoice *domain.Invoice, cfg config.ThirdPartyConfig, sellerCfg config.SellerConfig) *ViettelInvoiceRequest {
 	transactionUuid := ""
 	if invoice.TransactionUuid != nil && *invoice.TransactionUuid != "" {
 		transactionUuid = *invoice.TransactionUuid
@@ -36,6 +36,16 @@ func MapInvoiceToViettel(invoice *domain.Invoice, cfg config.ThirdPartyConfig) *
 			PaymentStatus:     true,
 			InvoiceIssuedDate: &now,
 			InvoiceNote:       invoice.Notes,
+			Validation:        intPtr(0),
+		},
+		SellerInfo: &SellerInfo{
+			SellerLegalName:   sellerCfg.LegalName,
+			SellerTaxCode:     sellerCfg.TaxCode,
+			SellerAddressLine: sellerCfg.Address,
+			SellerPhoneNumber: sellerCfg.PhoneNumber,
+			SellerEmail:       sellerCfg.Email,
+			SellerBankName:    sellerCfg.BankName,
+			SellerBankAccount: sellerCfg.BankAccount,
 		},
 		BuyerInfo: BuyerInfo{
 			BuyerLegalName:   invoice.CustomerName,
@@ -110,3 +120,13 @@ func float64Ptr(v float64) *float64 {
 	return &v
 }
 
+func derefStr(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+func intPtr(v int) *int {
+	return &v
+}
