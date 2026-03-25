@@ -21,7 +21,6 @@ func MapInvoiceToViettel(invoice *domain.Invoice, cfg config.ThirdPartyConfig, s
 	}
 
 	now := time.Now().UnixMilli()
-	exchangeRate := 1
 	selection := 1 // goods/service
 
 	req := &ViettelInvoiceRequest{
@@ -31,7 +30,7 @@ func MapInvoiceToViettel(invoice *domain.Invoice, cfg config.ThirdPartyConfig, s
 			InvoiceSeries:     cfg.InvoiceSeries,
 			TransactionUuid:   transactionUuid,
 			CurrencyCode:      invoice.Currency,
-			ExchangeRate:      &exchangeRate,
+			ExchangeRate:      float64Ptr(1),
 			AdjustmentType:    "1", // original invoice
 			PaymentStatus:     true,
 			InvoiceIssuedDate: &now,
