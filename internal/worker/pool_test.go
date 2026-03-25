@@ -38,6 +38,10 @@ func (m *mockPublisher) QueryStatus(_ context.Context, _ string) (string, []byte
 	return m.queryStatus, nil, nil
 }
 
+func (m *mockPublisher) SendToTax(_ context.Context, _, _, _ string) (int, int, error) {
+	return 0, 0, nil
+}
+
 type mockRepo struct {
 	mu       sync.Mutex
 	invoices map[uuid.UUID]*domain.Invoice
@@ -97,6 +101,10 @@ func (r *mockRepo) List(_ context.Context, _ domain.InvoiceFilter) ([]*domain.In
 }
 
 func (r *mockRepo) GetByExternalID(_ context.Context, _ string) (*domain.Invoice, error) {
+	return nil, domain.NewNotFoundError("not found")
+}
+
+func (r *mockRepo) GetByTransactionUuid(_ context.Context, _ string) (*domain.Invoice, error) {
 	return nil, domain.NewNotFoundError("not found")
 }
 

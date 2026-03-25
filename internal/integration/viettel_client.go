@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	neturl "net/url"
 	"sync"
 	"time"
 
@@ -132,7 +133,7 @@ func (c *ViettelClient) CreateInvoice(ctx context.Context, invoiceReq *ViettelIn
 		return nil, domain.NewInternalError("marshal invoice request", err)
 	}
 
-	rawBody, err := c.doAuthenticatedRequest(ctx, http.MethodPost, url, body)
+	rawBody, err := c.doAuthenticatedRequest(ctx, http.MethodPost, url, "application/json", body)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +150,7 @@ func (c *ViettelClient) CreateInvoice(ctx context.Context, invoiceReq *ViettelIn
 func (c *ViettelClient) SearchByTransactionUuid(ctx context.Context, transactionUuid, supplierTaxCode string) (*ViettelSearchResponse, error) {
 	url := fmt.Sprintf("%s%s/%s/%s", c.cfg.BaseURL, c.cfg.QueryStatusPath, supplierTaxCode, transactionUuid)
 
-	rawBody, err := c.doAuthenticatedRequest(ctx, http.MethodGet, url, nil)
+	rawBody, err := c.doAuthenticatedRequest(ctx, http.MethodGet, url, "application/json", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -164,13 +165,13 @@ func (c *ViettelClient) SearchByTransactionUuid(ctx context.Context, transaction
 
 // doAuthenticatedRequest sends an HTTP request with Viettel token cookie.
 // On 401, it re-authenticates once and retries.
-func (c *ViettelClient) doAuthenticatedRequest(ctx context.Context, method, url string, body []byte) ([]byte, error) {
+func (c *ViettelClient) doAuthenticatedRequest(ctx context.Context, method, url, contentType string, body []byte) ([]byte, error) {
 	token, err := c.getToken(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	rawBody, statusCode, err := c.doRequest(ctx, method, url, body, token)
+	rawBody, statusCode, err := c.doRequest(ctx, method, url, contentType, body, token)
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +186,7 @@ func (c *ViettelClient) doAuthenticatedRequest(ctx context.Context, method, url 
 			return nil, err
 		}
 
-		rawBody, statusCode, err = c.doRequest(ctx, method, url, body, token)
+		rawBody, statusCode, err = c.doRequest(ctx, method, url, contentType, body, token)
 		if err != nil {
 			return nil, err
 		}
@@ -204,8 +205,31 @@ func (c *ViettelClient) doAuthenticatedRequest(ctx context.Context, method, url 
 	return rawBody, nil
 }
 
+// SendToTaxByTransactionUuid sends an invoice to the tax authority (CQT) via Viettel (§7.36).
+func (c *ViettelClient) SendToTaxByTransactionUuid(ctx context.Context, req *SendToTaxRequest) (*SendToTaxResponse, error) {
+	url := fmt.Sprintf("%s%s", c.cfg.BaseURL, c.cfg.SendToTaxPath)
+
+	formData := neturl.Values{}
+	formData.Set("supplierTaxCode", req.SupplierTaxCode)
+	formData.Set("transactionUuid", req.TransactionUuid)
+	formData.Set("startDate", req.StartDate)
+	formData.Set("endDate", req.EndDate)
+
+	rawBody, err := c.doAuthenticatedRequest(ctx, http.MethodPost, url, "application/x-www-form-urlencoded", []byte(formData.Encode()))
+	if err != nil {
+		return nil, err
+	}
+
+	var resp SendToTaxResponse
+	if err := json.Unmarshal(rawBody, &resp); err != nil {
+		return nil, domain.NewThirdPartyError("decode send to tax response", err)
+	}
+
+	return &resp, nil
+}
+
 // doRequest executes a single HTTP request.
-func (c *ViettelClient) doRequest(ctx context.Context, method, url string, body []byte, token string) ([]byte, int, error) {
+func (c *ViettelClient) doRequest(ctx context.Context, method, url, contentType string, body []byte, token string) ([]byte, int, error) {
 	var bodyReader io.Reader
 	if body != nil {
 		bodyReader = bytes.NewReader(body)
@@ -216,7 +240,7 @@ func (c *ViettelClient) doRequest(ctx context.Context, method, url string, body 
 		return nil, 0, domain.NewInternalError("create http request", err)
 	}
 
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", contentType)
 	req.Header.Set("Cookie", "access_token="+token)
 
 	resp, err := c.http.Do(req)

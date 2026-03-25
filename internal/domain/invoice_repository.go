@@ -16,6 +16,7 @@ type InvoiceRepository interface {
 	UpdateStatus(ctx context.Context, id uuid.UUID, status InvoiceStatus, reason string) error
 	List(ctx context.Context, filter InvoiceFilter) ([]*Invoice, int64, error)
 	GetByExternalID(ctx context.Context, externalID string) (*Invoice, error)
+	GetByTransactionUuid(ctx context.Context, transactionUuid string) (*Invoice, error)
 	GetPendingPolling(ctx context.Context, limit int) ([]*Invoice, error)
 
 	// Items

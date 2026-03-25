@@ -36,6 +36,7 @@ func NewRouter(log *zerolog.Logger, dbPool *pgxpool.Pool, invoiceSvc *service.In
 			invoices.DELETE("/:id/items/:itemId", inv.RemoveItem)
 
 			invoices.POST("/:id/submit", inv.SubmitInvoice)
+			invoices.POST("/send-to-tax", inv.SendInvoiceToTax)
 
 			invoices.GET("/:id/status", inv.GetStatus)
 			invoices.GET("/:id/history", inv.GetHistory)
