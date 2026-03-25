@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -290,14 +291,26 @@ func (r *InvoiceRepo) AddItem(ctx context.Context, item *domain.InvoiceItem) err
 		INSERT INTO invoice_items (id, invoice_id, description, quantity, unit_price,
 			tax_rate, tax_amount, line_total,
 			original_unit_price, original_tax_amount, original_line_total,
-			sort_order, created_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`
+			sort_order, created_at,
+			selection, item_type, item_code, unit_code, unit_name,
+			discount, discount2, item_note, is_increase_item,
+			batch_no, exp_date, adjust_ratio, unit_price_with_tax, special_info)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,
+			$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)`
 
-	_, err := r.pool.Exec(ctx, query,
+	specialInfoJSON, err := json.Marshal(item.SpecialInfo)
+	if err != nil {
+		return domain.NewInternalError("failed to marshal special_info", err)
+	}
+
+	_, err = r.pool.Exec(ctx, query,
 		item.ID, item.InvoiceID, item.Description, item.Quantity, item.UnitPrice,
 		item.TaxRate, item.TaxAmount, item.LineTotal,
 		item.OriginalUnitPrice, item.OriginalTaxAmount, item.OriginalLineTotal,
 		item.SortOrder, item.CreatedAt,
+		item.Selection, item.ItemType, item.ItemCode, item.UnitCode, item.UnitName,
+		item.Discount, item.Discount2, item.ItemNote, item.IsIncreaseItem,
+		item.BatchNo, item.ExpDate, item.AdjustRatio, item.UnitPriceWithTax, specialInfoJSON,
 	)
 	if err != nil {
 		return domain.NewInternalError("failed to add item", err)
@@ -331,7 +344,10 @@ func (r *InvoiceRepo) GetItemsByInvoiceID(ctx context.Context, invoiceID uuid.UU
 		SELECT id, invoice_id, description, quantity, unit_price,
 			tax_rate, tax_amount, line_total,
 			original_unit_price, original_tax_amount, original_line_total,
-			sort_order, created_at
+			sort_order, created_at,
+			selection, item_type, item_code, unit_code, unit_name,
+			discount, discount2, item_note, is_increase_item,
+			batch_no, exp_date, adjust_ratio, unit_price_with_tax, special_info
 		FROM invoice_items WHERE invoice_id = $1
 		ORDER BY sort_order, created_at`
 
@@ -344,13 +360,20 @@ func (r *InvoiceRepo) GetItemsByInvoiceID(ctx context.Context, invoiceID uuid.UU
 	var items []*domain.InvoiceItem
 	for rows.Next() {
 		var item domain.InvoiceItem
+		var specialInfoJSON []byte
 		if err := rows.Scan(
 			&item.ID, &item.InvoiceID, &item.Description, &item.Quantity, &item.UnitPrice,
 			&item.TaxRate, &item.TaxAmount, &item.LineTotal,
 			&item.OriginalUnitPrice, &item.OriginalTaxAmount, &item.OriginalLineTotal,
 			&item.SortOrder, &item.CreatedAt,
+			&item.Selection, &item.ItemType, &item.ItemCode, &item.UnitCode, &item.UnitName,
+			&item.Discount, &item.Discount2, &item.ItemNote, &item.IsIncreaseItem,
+			&item.BatchNo, &item.ExpDate, &item.AdjustRatio, &item.UnitPriceWithTax, &specialInfoJSON,
 		); err != nil {
 			return nil, domain.NewInternalError("failed to scan item", err)
+		}
+		if len(specialInfoJSON) > 0 {
+			_ = json.Unmarshal(specialInfoJSON, &item.SpecialInfo)
 		}
 		items = append(items, &item)
 	}
