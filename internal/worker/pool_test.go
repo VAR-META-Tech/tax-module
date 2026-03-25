@@ -125,7 +125,8 @@ func (r *mockRepo) GetItemsByInvoiceID(_ context.Context, invoiceID uuid.UUID) (
 	return r.items[invoiceID], nil
 }
 
-func (r *mockRepo) DeleteItem(_ context.Context, _ uuid.UUID) error   { return nil }
+func (r *mockRepo) UpdateItem(_ context.Context, _ *domain.InvoiceItem) error { return nil }
+func (r *mockRepo) DeleteItem(_ context.Context, _ uuid.UUID) error           { return nil }
 func (r *mockRepo) AddStatusHistory(_ context.Context, _ *domain.InvoiceStatusHistory) error {
 	return nil
 }

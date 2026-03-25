@@ -12,7 +12,7 @@ import (
 // MapInvoiceToViettel converts a domain Invoice into a ViettelInvoiceRequest.
 // It reuses invoice.TransactionUuid for idempotent retries. Falls back to a new UUID
 // if TransactionUuid is not set (e.g., legacy invoices before this field existed).
-func MapInvoiceToViettel(invoice *domain.Invoice, cfg config.ThirdPartyConfig) *ViettelInvoiceRequest {
+func MapInvoiceToViettel(invoice *domain.Invoice, cfg config.ThirdPartyConfig, sellerCfg config.SellerConfig) *ViettelInvoiceRequest {
 	transactionUuid := ""
 	if invoice.TransactionUuid != nil && *invoice.TransactionUuid != "" {
 		transactionUuid = *invoice.TransactionUuid
@@ -36,7 +36,9 @@ func MapInvoiceToViettel(invoice *domain.Invoice, cfg config.ThirdPartyConfig) *
 			PaymentStatus:     true,
 			InvoiceIssuedDate: &now,
 			InvoiceNote:       invoice.Notes,
+			Validation:        intPtr(0),
 		},
+		SellerInfo: buildSellerInfo(sellerCfg),
 		BuyerInfo: BuyerInfo{
 			BuyerLegalName:   invoice.CustomerName,
 			BuyerTaxCode:     invoice.CustomerTaxID,
@@ -106,7 +108,34 @@ func buildTaxBreakdowns(items []*domain.InvoiceItem) []TaxBreakdown {
 	return result
 }
 
+// buildSellerInfo returns a populated SellerInfo when sellerTaxCode is configured.
+// When TaxCode is empty, returns nil so that Viettel uses seller data from the HDDT portal.
+func buildSellerInfo(sellerCfg config.SellerConfig) *SellerInfo {
+	if sellerCfg.TaxCode == "" {
+		return nil
+	}
+	return &SellerInfo{
+		SellerLegalName:   sellerCfg.LegalName,
+		SellerTaxCode:     sellerCfg.TaxCode,
+		SellerAddressLine: sellerCfg.Address,
+		SellerPhoneNumber: sellerCfg.PhoneNumber,
+		SellerEmail:       sellerCfg.Email,
+		SellerBankName:    sellerCfg.BankName,
+		SellerBankAccount: sellerCfg.BankAccount,
+	}
+}
+
 func float64Ptr(v float64) *float64 {
 	return &v
 }
 
+func derefStr(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+func intPtr(v int) *int {
+	return &v
+}

@@ -12,20 +12,23 @@ import (
 
 // ViettelPublisher implements domain.InvoicePublisher using the Viettel SInvoice API.
 type ViettelPublisher struct {
-	client *ViettelClient
-	cfg    config.ThirdPartyConfig
-	log    *zerolog.Logger
+	client    *ViettelClient
+	cfg       config.ThirdPartyConfig
+	sellerCfg config.SellerConfig
+	log       *zerolog.Logger
 }
 
 // NewViettelPublisher creates a new publisher backed by Viettel.
-func NewViettelPublisher(client *ViettelClient, cfg config.ThirdPartyConfig, log *zerolog.Logger) *ViettelPublisher {
-	return &ViettelPublisher{client: client, cfg: cfg, log: log}
+func NewViettelPublisher(client *ViettelClient, cfg config.ThirdPartyConfig, sellerCfg config.SellerConfig, log *zerolog.Logger) *ViettelPublisher {
+	return &ViettelPublisher{client: client, cfg: cfg, sellerCfg: sellerCfg, log: log}
 }
 
 // CreateInvoice maps the domain invoice, calls Viettel, and returns the transactionUuid as externalID.
 func (p *ViettelPublisher) CreateInvoice(ctx context.Context, invoice *domain.Invoice) (string, error) {
-	viettelReq := MapInvoiceToViettel(invoice, p.cfg)
+	viettelReq := MapInvoiceToViettel(invoice, p.cfg, p.sellerCfg)
 	transactionUuid := viettelReq.GeneralInvoiceInfo.TransactionUuid
+
+	invoice.TransactionUuid = &transactionUuid
 
 	p.log.Info().
 		Str("invoice_id", invoice.ID.String()).

@@ -235,7 +235,7 @@ func TestViettelPublisher_CreateInvoice(t *testing.T) {
 	}
 
 	client := NewViettelClient(cfg, newMemTokenRepo(), &log)
-	publisher := NewViettelPublisher(client, cfg, &log)
+	publisher := NewViettelPublisher(client, cfg, config.SellerConfig{}, &log)
 
 	invoice := &domain.Invoice{
 		ID:           uuid.New(),
@@ -288,7 +288,7 @@ func TestViettelPublisher_QueryStatus_Completed(t *testing.T) {
 	}
 
 	client := NewViettelClient(cfg, newMemTokenRepo(), &log)
-	publisher := NewViettelPublisher(client, cfg, &log)
+	publisher := NewViettelPublisher(client, cfg, config.SellerConfig{}, &log)
 
 	status, rawResp, err := publisher.QueryStatus(context.Background(), "txn-123")
 	if err != nil {
@@ -330,7 +330,7 @@ func TestViettelPublisher_QueryStatus_Pending(t *testing.T) {
 	}
 
 	client := NewViettelClient(cfg, newMemTokenRepo(), &log)
-	publisher := NewViettelPublisher(client, cfg, &log)
+	publisher := NewViettelPublisher(client, cfg, config.SellerConfig{}, &log)
 
 	status, _, err := publisher.QueryStatus(context.Background(), "txn-456")
 	if err != nil {

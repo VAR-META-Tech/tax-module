@@ -14,6 +14,7 @@ type Config struct {
 	ThirdParty ThirdPartyConfig
 	Worker     WorkerConfig
 	Log        LogConfig
+	Seller     SellerConfig
 }
 
 type ServerConfig struct {
@@ -67,6 +68,16 @@ type LogConfig struct {
 	Format string `mapstructure:"LOG_FORMAT"`
 }
 
+type SellerConfig struct {
+	LegalName   string `mapstructure:"SELLER_LEGAL_NAME"`
+	TaxCode     string `mapstructure:"SELLER_TAX_CODE"`
+	Address     string `mapstructure:"SELLER_ADDRESS"`
+	PhoneNumber string `mapstructure:"SELLER_PHONE"`
+	Email       string `mapstructure:"SELLER_EMAIL"`
+	BankName    string `mapstructure:"SELLER_BANK_NAME"`
+	BankAccount string `mapstructure:"SELLER_BANK_ACCOUNT"`
+}
+
 func Load() (*Config, error) {
 	viper.SetConfigFile(".env")
 	viper.AutomaticEnv()
@@ -106,6 +117,15 @@ func Load() (*Config, error) {
 
 	viper.SetDefault("LOG_LEVEL", "info")
 	viper.SetDefault("LOG_FORMAT", "console")
+
+	// Seller defaults
+	viper.SetDefault("SELLER_LEGAL_NAME", "")
+	viper.SetDefault("SELLER_TAX_CODE", "")
+	viper.SetDefault("SELLER_ADDRESS", "")
+	viper.SetDefault("SELLER_PHONE", "")
+	viper.SetDefault("SELLER_EMAIL", "")
+	viper.SetDefault("SELLER_BANK_NAME", "")
+	viper.SetDefault("SELLER_BANK_ACCOUNT", "")
 
 	// Read .env file (ignore error if not found — env vars still work)
 	if err := viper.ReadInConfig(); err != nil {
@@ -155,6 +175,15 @@ func Load() (*Config, error) {
 		Log: LogConfig{
 			Level:  viper.GetString("LOG_LEVEL"),
 			Format: viper.GetString("LOG_FORMAT"),
+		},
+		Seller: SellerConfig{
+			LegalName:   viper.GetString("SELLER_LEGAL_NAME"),
+			TaxCode:     viper.GetString("SELLER_TAX_CODE"),
+			Address:     viper.GetString("SELLER_ADDRESS"),
+			PhoneNumber: viper.GetString("SELLER_PHONE"),
+			Email:       viper.GetString("SELLER_EMAIL"),
+			BankName:    viper.GetString("SELLER_BANK_NAME"),
+			BankAccount: viper.GetString("SELLER_BANK_ACCOUNT"),
 		},
 	}
 

@@ -10,6 +10,16 @@ import (
 	"github.com/google/uuid"
 )
 
+var sellerCfg = config.SellerConfig{
+	LegalName:   "CÔNG TY DEMO",
+	TaxCode:     "0100109106",
+	Address:     "123 Demo Street",
+	PhoneNumber: "0901234567",
+	Email:       "demo@example.com",
+	BankName:    "Vietcombank",
+	BankAccount: "123456789",
+}
+
 func TestMapInvoiceToViettel(t *testing.T) {
 	cfg := config.ThirdPartyConfig{
 		InvoiceType:   "1",
@@ -22,13 +32,13 @@ func TestMapInvoiceToViettel(t *testing.T) {
 		ID:              uuid.New(),
 		TransactionUuid: &txnUuid,
 		CustomerName:    "Cong ty ABC",
-		CustomerTaxID:   strPtr("0123456789"),
-		CustomerAddress: strPtr("123 Nguyen Hue, HCM"),
+		CustomerTaxID:   "0123456789",
+		CustomerAddress: "123 Nguyen Hue, HCM",
 		Currency:        "VND",
 		TotalAmount:     11000,
 		TaxAmount:       1000,
 		NetAmount:       10000,
-		Notes:           strPtr("Test invoice"),
+		Notes:           "Test invoice",
 		Items: []*domain.InvoiceItem{
 			{
 				ID:          uuid.New(),
@@ -42,7 +52,7 @@ func TestMapInvoiceToViettel(t *testing.T) {
 		},
 	}
 
-	result := MapInvoiceToViettel(invoice, cfg)
+	result := MapInvoiceToViettel(invoice, cfg, sellerCfg)
 
 	if result.GeneralInvoiceInfo.InvoiceType != "1" {
 		t.Errorf("InvoiceType = %q, want %q", result.GeneralInvoiceInfo.InvoiceType, "1")
@@ -93,7 +103,7 @@ func TestMapInvoiceToViettel_MultipleItems(t *testing.T) {
 			{Description: "Item B", Quantity: 2, UnitPrice: 5000, TaxRate: 5, TaxAmount: 500, LineTotal: 10500},
 		},
 	}
-	result := MapInvoiceToViettel(invoice, cfg)
+	result := MapInvoiceToViettel(invoice, cfg, sellerCfg)
 	if len(result.ItemInfo) != 2 {
 		t.Fatalf("ItemInfo count = %d, want 2", len(result.ItemInfo))
 	}
@@ -108,7 +118,7 @@ func TestMapInvoiceToViettel_MultipleItems(t *testing.T) {
 func TestMapInvoiceToViettel_EmptyItems(t *testing.T) {
 	cfg := config.ThirdPartyConfig{InvoiceType: "1"}
 	invoice := &domain.Invoice{ID: uuid.New(), Currency: "VND", Items: []*domain.InvoiceItem{}}
-	result := MapInvoiceToViettel(invoice, cfg)
+	result := MapInvoiceToViettel(invoice, cfg, sellerCfg)
 	if len(result.ItemInfo) != 0 {
 		t.Errorf("ItemInfo count = %d, want 0", len(result.ItemInfo))
 	}
@@ -118,7 +128,7 @@ func TestMapInvoiceToViettel_FallbackUuid(t *testing.T) {
 	cfg := config.ThirdPartyConfig{InvoiceType: "1"}
 	// No TransactionUuid set — mapper should generate a new one as fallback.
 	invoice := &domain.Invoice{ID: uuid.New(), Currency: "VND", Items: []*domain.InvoiceItem{}}
-	result := MapInvoiceToViettel(invoice, cfg)
+	result := MapInvoiceToViettel(invoice, cfg, sellerCfg)
 	if result.GeneralInvoiceInfo.TransactionUuid == "" {
 		t.Error("TransactionUuid should be generated as fallback when not set on invoice")
 	}
@@ -137,8 +147,8 @@ func TestMapInvoiceToViettel_ReusesUuid(t *testing.T) {
 	}
 
 	// Call mapper twice — should return the same UUID both times (idempotent).
-	r1 := MapInvoiceToViettel(invoice, cfg)
-	r2 := MapInvoiceToViettel(invoice, cfg)
+	r1 := MapInvoiceToViettel(invoice, cfg, sellerCfg)
+	r2 := MapInvoiceToViettel(invoice, cfg, sellerCfg)
 	if r1.GeneralInvoiceInfo.TransactionUuid != txnUuid {
 		t.Errorf("First call TransactionUuid = %q, want %q", r1.GeneralInvoiceInfo.TransactionUuid, txnUuid)
 	}
@@ -186,7 +196,7 @@ func TestBuildTaxBreakdowns_GroupsByRate(t *testing.T) {
 func TestMapInvoiceToViettel_TimestampFormat(t *testing.T) {
 	cfg := config.ThirdPartyConfig{InvoiceType: "1"}
 	invoice := &domain.Invoice{ID: uuid.New(), Currency: "VND", Items: []*domain.InvoiceItem{}}
-	result := MapInvoiceToViettel(invoice, cfg)
+	result := MapInvoiceToViettel(invoice, cfg, sellerCfg)
 	ts := *result.GeneralInvoiceInfo.InvoiceIssuedDate
 	now := time.Now().UnixMilli()
 	diff := now - ts

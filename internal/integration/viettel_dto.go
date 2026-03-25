@@ -1,5 +1,10 @@
 package integration
 
+import (
+	"encoding/json"
+	"fmt"
+)
+
 // ---------------------------------------------------------------------------
 // Authentication (§5.5)
 // ---------------------------------------------------------------------------
@@ -284,13 +289,97 @@ type InvoiceListRow struct {
 type ViettelDraftRequest = ViettelInvoiceRequest
 
 // ---------------------------------------------------------------------------
+// Viettel API error codes (BAD_REQUEST / HTTP 400)
+// ---------------------------------------------------------------------------
+
+// ViettelErrCode identifies a specific Viettel API error.
+type ViettelErrCode string
+
+const (
+	ViettelErrTaxCodeInvalid       ViettelErrCode = "TAX_CODE_INVALID"
+	ViettelErrTxnUuidRequired      ViettelErrCode = "TRANSACTION_UUID_REQUIRED"
+	ViettelErrTaxCodeRequired      ViettelErrCode = "TAX_CODE_REQUIRED"
+	ViettelErrBuyerEmailRequired   ViettelErrCode = "BUYER_EMAIL_REQUIRED"
+	ViettelErrNotFoundData         ViettelErrCode = "NOT_FOUND_DATA"
+	ViettelErrBuyerEmailFormat     ViettelErrCode = "BUYER_EMAIL_ADDRESS_FORMAT"
+	ViettelErrEmailConfigNotActive ViettelErrCode = "EMAIL_CONFIG_NOT_ACTIVE"
+	ViettelErrEmailNotConfig       ViettelErrCode = "EMAIL_NOT_CONFIG"
+	ViettelErrUnknown              ViettelErrCode = "UNKNOWN"
+)
+
+// viettelErrCodeMap maps Viettel message strings to typed error codes.
+var viettelErrCodeMap = map[string]ViettelErrCode{
+	"TAX_CODE_INVALID":                            ViettelErrTaxCodeInvalid,
+	"INVOICE_VALID_INPUT_INVALID_TAX_CODE":        ViettelErrTaxCodeInvalid,
+	"INVOICE_VALID_INPUT_INVALID_BUYER_TAX_CODE":  ViettelErrTaxCodeInvalid,
+	"TRANSACTION_UUID_REQUIRED":                   ViettelErrTxnUuidRequired,
+	"TAX_CODE_REQUIRED":                           ViettelErrTaxCodeRequired,
+	"BUYER_EMAIL_REQUIRED":                        ViettelErrBuyerEmailRequired,
+	"NOT_FOUND_DATA":                              ViettelErrNotFoundData,
+	"BUYER_EMAIL_ADDRESS_FORMAT":                  ViettelErrBuyerEmailFormat,
+	"EMAIL_CONFIG_NOT_ACTIVE":                     ViettelErrEmailConfigNotActive,
+	"EMAIL_NOT_CONFIG":                            ViettelErrEmailNotConfig,
+}
+
+// nonRetryableViettelErrors lists error codes that should never be retried.
+var nonRetryableViettelErrors = map[ViettelErrCode]bool{
+	ViettelErrTaxCodeInvalid:     true,
+	ViettelErrTxnUuidRequired:    true,
+	ViettelErrTaxCodeRequired:    true,
+	ViettelErrBuyerEmailRequired: true,
+	ViettelErrBuyerEmailFormat:   true,
+	ViettelErrNotFoundData:       true,
+}
+
+// ---------------------------------------------------------------------------
 // Viettel API error response (generic error format)
 // ---------------------------------------------------------------------------
 
-// ViettelErrorResponse represents the alternative error format returned
-// for validation errors (HTTP 400).
+// ViettelErrorResponse represents the error format returned for HTTP 400.
 type ViettelErrorResponse struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
 	Data    string `json:"data,omitempty"`
+}
+
+// ViettelError is a structured error wrapping a Viettel API error response.
+type ViettelError struct {
+	ErrCode     ViettelErrCode
+	RawMessage  string // original message from Viettel API
+	Description string // user-facing description
+	Retryable   bool
+}
+
+func (e *ViettelError) Error() string {
+	return fmt.Sprintf("viettel error [%s]: %s", e.ErrCode, e.Description)
+}
+
+// ParseViettelError parses a raw 400 response body into a structured ViettelError.
+func ParseViettelError(rawBody []byte) *ViettelError {
+	var resp ViettelErrorResponse
+	if err := json.Unmarshal(rawBody, &resp); err != nil {
+		return &ViettelError{
+			ErrCode:     ViettelErrUnknown,
+			RawMessage:  string(rawBody),
+			Description: string(rawBody),
+			Retryable:   false,
+		}
+	}
+
+	code, ok := viettelErrCodeMap[resp.Message]
+	if !ok {
+		code = ViettelErrUnknown
+	}
+
+	desc := resp.Data
+	if desc == "" {
+		desc = resp.Message
+	}
+
+	return &ViettelError{
+		ErrCode:     code,
+		RawMessage:  resp.Message,
+		Description: desc,
+		Retryable:   !nonRetryableViettelErrors[code],
+	}
 }

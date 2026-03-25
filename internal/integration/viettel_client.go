@@ -191,6 +191,11 @@ func (c *ViettelClient) doAuthenticatedRequest(ctx context.Context, method, url 
 		}
 	}
 
+	if statusCode == http.StatusBadRequest {
+		vErr := ParseViettelError(rawBody)
+		return nil, domain.NewThirdPartyError(vErr.Error(), vErr)
+	}
+
 	if statusCode < 200 || statusCode >= 300 {
 		return nil, domain.NewThirdPartyError(
 			fmt.Sprintf("viettel API returned HTTP %d: %s", statusCode, string(rawBody)), nil)
