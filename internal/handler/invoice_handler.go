@@ -284,6 +284,41 @@ func (h *InvoiceHandler) SubmitInvoice(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.SuccessResponse(gin.H{"status": "submitted"}))
 }
 
+// SendInvoiceToTax godoc POST /api/v1/invoices/send-to-tax
+func (h *InvoiceHandler) SendInvoiceToTax(c *gin.Context) {
+	var req struct {
+		TransactionUuid string `json:"transaction_uuid" binding:"required"`
+		StartDate       string `json:"start_date" binding:"required"`
+		EndDate         string `json:"end_date" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, dto.ErrorResponse("VALIDATION_ERROR", "transaction_uuid, start_date, end_date are required"))
+		return
+	}
+
+	successCount, errorCount, err := h.svc.SendInvoiceToTax(c.Request.Context(), req.TransactionUuid, req.StartDate, req.EndDate)
+	if err != nil {
+		// If errorCount > 0, it's a partial failure from Viettel — some invoices
+		// succeeded and some failed. Return the counts so the client knows what happened.
+		if errorCount > 0 {
+			c.JSON(http.StatusOK, dto.SuccessResponse(gin.H{
+				"success_count": successCount,
+				"error_count":   errorCount,
+			}))
+			return
+		}
+		// Otherwise it's a total failure (e.g. network error, auth error, validation error).
+		handleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, dto.SuccessResponse(gin.H{
+		"success_count": successCount,
+		"error_count":   errorCount,
+	}))
+}
+
 // GetStatus godoc GET /api/v1/invoices/:id/status
 func (h *InvoiceHandler) GetStatus(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))

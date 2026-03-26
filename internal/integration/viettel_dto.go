@@ -29,11 +29,11 @@ type AuthResponse struct {
 // ViettelInvoiceRequest is the top-level body for createInvoice,
 // createOrUpdateInvoiceDraft, and related endpoints.
 type ViettelInvoiceRequest struct {
-	GeneralInvoiceInfo GeneralInvoiceInfo `json:"generalInvoiceInfo"`
+	GeneralInvoiceInfo GeneralInvoiceInfo `json:"generalInvoiceInfo" validate:"required"`
 	BuyerInfo          BuyerInfo          `json:"buyerInfo"`
-	SellerInfo         *SellerInfo        `json:"sellerInfo,omitempty"`
-	Payments           []Payment          `json:"payments"`
-	ItemInfo           []ItemInfo         `json:"itemInfo"`
+	SellerInfo         *SellerInfo        `json:"sellerInfo,omitempty" validate:"omitempty"`
+	Payments           []Payment          `json:"payments" validate:"required,min=1,dive"`
+	ItemInfo           []ItemInfo         `json:"itemInfo" validate:"required,min=1,dive"`
 	TaxBreakdowns      []TaxBreakdown     `json:"taxBreakdowns"`
 	SummarizeInfo      SummarizeInfo      `json:"summarizeInfo"`
 	Metadata           []MetadataEntry    `json:"metadata,omitempty"`
@@ -41,123 +41,123 @@ type ViettelInvoiceRequest struct {
 
 // GeneralInvoiceInfo contains the common invoice fields (§6.2).
 type GeneralInvoiceInfo struct {
-	InvoiceType     string `json:"invoiceType"`
-	TemplateCode    string `json:"templateCode"`
-	InvoiceSeries   string `json:"invoiceSeries"`
-	TransactionUuid string `json:"transactionUuid"` // required; min 10, max 36; UUID v4 recommended
-	CurrencyCode    string `json:"currencyCode"`
-	ExchangeRate    *float64 `json:"exchangeRate,omitempty"` // default 1; BigDecimal (max 11 integer + 2 decimal digits)
+	InvoiceType     string   `json:"invoiceType"`
+	TemplateCode    string   `json:"templateCode" validate:"required,max=20"`
+	InvoiceSeries   string   `json:"invoiceSeries" validate:"required,max=25"`
+	TransactionUuid string   `json:"transactionUuid" validate:"required,min=10,max=36"`
+	CurrencyCode    string   `json:"currencyCode" validate:"required,len=3"`
+	ExchangeRate    *float64 `json:"exchangeRate,omitempty"`
 
 	// Adjustment / replacement fields
-	AdjustmentType        string `json:"adjustmentType,omitempty"`        // 1=original, 3=replacement, 5=adjustment
-	AdjustmentInvoiceType string `json:"adjustmentInvoiceType,omitempty"` // 1=amount, 2=info (when adjustmentType=5)
-	AdjustedNote          string `json:"adjustedNote,omitempty"`
+	AdjustmentType        string `json:"adjustmentType,omitempty" validate:"omitempty,oneof=1 3 5"`
+	AdjustmentInvoiceType string `json:"adjustmentInvoiceType,omitempty" validate:"omitempty,oneof=1 2"`
+	AdjustedNote          string `json:"adjustedNote,omitempty" validate:"max=255"`
 
 	// Original invoice reference (required for adjustment/replacement)
-	OriginalInvoiceId        string `json:"originalInvoiceId,omitempty"`
+	OriginalInvoiceId        string `json:"originalInvoiceId,omitempty" validate:"omitempty,min=7,max=15"`
 	OriginalInvoiceIssueDate *int64 `json:"originalInvoiceIssueDate,omitempty"` // unix millis
-	OriginalInvoiceType      string `json:"originalInvoiceType,omitempty"`      // 0-4
-	OriginalTemplateCode     string `json:"originalTemplateCode,omitempty"`
+	OriginalInvoiceType      string `json:"originalInvoiceType,omitempty" validate:"omitempty,oneof=0 1 2 3 4"`
+	OriginalTemplateCode     string `json:"originalTemplateCode,omitempty" validate:"max=20"`
 
-	AdditionalReferenceDesc string `json:"additionalReferenceDesc,omitempty"`
+	AdditionalReferenceDesc string `json:"additionalReferenceDesc,omitempty" validate:"max=225"`
 	AdditionalReferenceDate *int64 `json:"additionalReferenceDate,omitempty"` // unix millis
 
 	InvoiceIssuedDate  *int64 `json:"invoiceIssuedDate,omitempty"` // unix millis
-	InvoiceNote        string `json:"invoiceNote,omitempty"`
+	InvoiceNote        string `json:"invoiceNote,omitempty" validate:"max=500"`
 	PaymentStatus      bool   `json:"paymentStatus"`
 	CusGetInvoiceRight *bool  `json:"cusGetInvoiceRight,omitempty"`
-	ReservationCode    string `json:"reservationCode,omitempty"`
-	CertificateSerial  string `json:"certificateSerial,omitempty"`
+	ReservationCode    string `json:"reservationCode,omitempty" validate:"max=100"`
+	CertificateSerial  string `json:"certificateSerial,omitempty" validate:"max=100"`
 	AdjustAmount20     string `json:"adjustAmount20,omitempty"`
 	Validation         *int   `json:"validation,omitempty"` // 0 = skip validation
-	DetailedListNo     string `json:"DetailedListNo,omitempty"`
-	DetailedListDate   string `json:"DetailedListDate,omitempty"`
-	QrCode             string `json:"qrCode,omitempty"`
+	DetailedListNo     string `json:"DetailedListNo,omitempty" validate:"max=50"`
+	DetailedListDate   string `json:"DetailedListDate,omitempty" validate:"max=50"`
+	QrCode             string `json:"qrCode,omitempty" validate:"max=500"`
 	OtherTax           string `json:"otherTax,omitempty"`
 }
 
 // BuyerInfo contains buyer/customer data (§6.4).
 type BuyerInfo struct {
-	BuyerName          string `json:"buyerName,omitempty"`          // max 100
-	BuyerCode          string `json:"buyerCode,omitempty"`          // max 400
-	BuyerLegalName     string `json:"buyerLegalName,omitempty"`     // max 400; required if buyerTaxCode is set
-	BuyerTaxCode       string `json:"buyerTaxCode,omitempty"`       // max 20
-	BuyerBudgetCode    string `json:"buyerBudgetCode,omitempty"`    // max 7
-	BuyerAddressLine   string `json:"buyerAddressLine,omitempty"`   // max 1200; required when buyerNotGetInvoice=0
-	BuyerPhoneNumber   string `json:"buyerPhoneNumber,omitempty"`   // max 15
+	BuyerName          string `json:"buyerName,omitempty" validate:"max=100"`
+	BuyerCode          string `json:"buyerCode,omitempty" validate:"max=400"`
+	BuyerLegalName     string `json:"buyerLegalName,omitempty" validate:"max=400"`
+	BuyerTaxCode       string `json:"buyerTaxCode,omitempty" validate:"max=20"`
+	BuyerBudgetCode    string `json:"buyerBudgetCode,omitempty" validate:"max=7"`
+	BuyerAddressLine   string `json:"buyerAddressLine,omitempty" validate:"max=1200"`
+	BuyerPhoneNumber   string `json:"buyerPhoneNumber,omitempty" validate:"max=15"`
 	BuyerFaxNumber     string `json:"buyerFaxNumber,omitempty"`
-	BuyerEmail         string `json:"buyerEmail,omitempty"`         // max 2000; semicolon-separated for multiple
-	BuyerBankName      string `json:"buyerBankName,omitempty"`      // max 200
-	BuyerBankAccount   string `json:"buyerBankAccount,omitempty"`   // max 30
+	BuyerEmail         string `json:"buyerEmail,omitempty" validate:"max=2000"`
+	BuyerBankName      string `json:"buyerBankName,omitempty" validate:"max=200"`
+	BuyerBankAccount   string `json:"buyerBankAccount,omitempty" validate:"max=30"`
 	BuyerDistrictName  string `json:"buyerDistrictName,omitempty"`
 	BuyerCityName      string `json:"buyerCityName,omitempty"`
 	BuyerCountryCode   string `json:"buyerCountryCode,omitempty"`
-	BuyerIdType        string `json:"buyerIdType,omitempty"`        // "1"=CCCD, "3"=Passport
-	BuyerIdNo          string `json:"buyerIdNo,omitempty"`          // max 200; required when buyerIdType is set
+	BuyerIdType        string `json:"buyerIdType,omitempty" validate:"omitempty,oneof=1 3"`
+	BuyerIdNo          string `json:"buyerIdNo,omitempty" validate:"max=200"`
 	BuyerBirthDay      string `json:"buyerBirthDay,omitempty"`
-	BuyerNotGetInvoice *int   `json:"buyerNotGetInvoice,omitempty"` // 0=gets invoice, 1=does not; default 0
+	BuyerNotGetInvoice *int   `json:"buyerNotGetInvoice,omitempty" validate:"omitempty,oneof=0 1"`
 }
 
 // SellerInfo contains seller/vendor data (§6.3).
 // Optional — if sellerTaxCode is omitted, Viettel uses the portal config.
 type SellerInfo struct {
-	SellerLegalName   string `json:"sellerLegalName,omitempty"`   // required when sellerTaxCode is set; max 400
-	SellerTaxCode     string `json:"sellerTaxCode,omitempty"`     // required; max 20
-	SellerAddressLine string `json:"sellerAddressLine,omitempty"` // required when sellerTaxCode is set; max 255
-	SellerPhoneNumber string `json:"sellerPhoneNumber,omitempty"` // max 50
-	SellerFaxNumber   string `json:"sellerFaxNumber,omitempty"`   // max 50
-	SellerEmail       string `json:"sellerEmail,omitempty"`       // max 50
-	SellerBankName    string `json:"sellerBankName,omitempty"`    // max 400
-	SellerBankAccount string `json:"sellerBankAccount,omitempty"` // max 30
-	SellerDistrictName string `json:"sellerDistrictName,omitempty"` // max 50
-	SellerCityName     string `json:"sellerCityName,omitempty"`     // max 600
-	SellerCountryCode  string `json:"sellerCountryCode,omitempty"`  // max 15
-	SellerWebsite      string `json:"sellerWebsite,omitempty"`      // max 200
-	StoreCode          string `json:"storeCode,omitempty"`          // max 50
-	StoreName          string `json:"storeName,omitempty"`          // max 400
-	MerchantCode       string `json:"merchantCode,omitempty"`       // max 4; required for qrcode78
-	MerchantName       string `json:"merchantName,omitempty"`       // max 25; required for qrcode78
-	MerchantCity       string `json:"merchantCity,omitempty"`       // max 15; required for qrcode78
+	SellerLegalName    string `json:"sellerLegalName,omitempty" validate:"required,max=400"`
+	SellerTaxCode      string `json:"sellerTaxCode,omitempty" validate:"required,max=20"`
+	SellerAddressLine  string `json:"sellerAddressLine,omitempty" validate:"required,max=255"`
+	SellerPhoneNumber  string `json:"sellerPhoneNumber,omitempty" validate:"max=50"`
+	SellerFaxNumber    string `json:"sellerFaxNumber,omitempty" validate:"max=50"`
+	SellerEmail        string `json:"sellerEmail,omitempty" validate:"max=50"`
+	SellerBankName     string `json:"sellerBankName,omitempty" validate:"max=400"`
+	SellerBankAccount  string `json:"sellerBankAccount,omitempty" validate:"max=30"`
+	SellerDistrictName string `json:"sellerDistrictName,omitempty" validate:"max=50"`
+	SellerCityName     string `json:"sellerCityName,omitempty" validate:"max=600"`
+	SellerCountryCode  string `json:"sellerCountryCode,omitempty" validate:"max=15"`
+	SellerWebsite      string `json:"sellerWebsite,omitempty" validate:"max=200"`
+	StoreCode          string `json:"storeCode,omitempty" validate:"max=50"`
+	StoreName          string `json:"storeName,omitempty" validate:"max=400"`
+	MerchantCode       string `json:"merchantCode,omitempty" validate:"max=4"`
+	MerchantName       string `json:"merchantName,omitempty" validate:"max=25"`
+	MerchantCity       string `json:"merchantCity,omitempty" validate:"max=15"`
 }
 
 // Payment describes a payment method entry (§6.5).
 type Payment struct {
-	PaymentMethod     string `json:"paymentMethod,omitempty"`     // 1-8
-	PaymentMethodName string `json:"paymentMethodName"` // required; TM, CK, TM/CK, DTCN, KHAC, etc.
+	PaymentMethod     string `json:"paymentMethod,omitempty" validate:"max=50"`
+	PaymentMethodName string `json:"paymentMethodName" validate:"required,max=50"`
 }
 
 // ItemInfo represents a line item on the invoice (§6.6).
 type ItemInfo struct {
 	LineNumber                   *int     `json:"lineNumber,omitempty"`
-	Selection                    *int     `json:"selection,omitempty"`    // 1=goods,2=note,3=discount,4=table/fee,5=promo(TT78),6=special(ND70)
-	ItemType                     *int     `json:"itemType,omitempty"`    // required when selection=6; 1-6 per ND70
-	ItemCode                     string   `json:"itemCode,omitempty"`    // max 50
-	ItemName                     string   `json:"itemName,omitempty"`    // max 500
-	UnitCode                     string   `json:"unitCode,omitempty"`    // max 100
-	UnitName                     string   `json:"unitName,omitempty"`    // max 300
+	Selection                    *int     `json:"selection,omitempty" validate:"omitempty,min=1,max=6"`
+	ItemType                     *int     `json:"itemType,omitempty" validate:"omitempty,min=1,max=6"`
+	ItemCode                     string   `json:"itemCode,omitempty" validate:"max=50"`
+	ItemName                     string   `json:"itemName,omitempty" validate:"max=500"`
+	UnitCode                     string   `json:"unitCode,omitempty" validate:"max=100"`
+	UnitName                     string   `json:"unitName,omitempty" validate:"max=300"`
 	Quantity                     *float64 `json:"quantity,omitempty"`
 	UnitPrice                    *float64 `json:"unitPrice,omitempty"`
-	UnitPriceWithTax             *float64 `json:"unitPriceWithTax,omitempty"` // unit price including tax (draft fuel invoices)
-	ItemTotalAmountWithoutTax    *float64 `json:"itemTotalAmountWithoutTax"` // required; max 13 digits; = quantity * unitPrice
+	UnitPriceWithTax             *float64 `json:"unitPriceWithTax,omitempty"`
+	ItemTotalAmountWithoutTax    *float64 `json:"itemTotalAmountWithoutTax" validate:"required"`
 	ItemTotalAmountAfterDiscount *float64 `json:"itemTotalAmountAfterDiscount,omitempty"`
 	ItemTotalAmountWithTax       *float64 `json:"itemTotalAmountWithTax,omitempty"`
-	TaxPercentage                *float64 `json:"taxPercentage,omitempty"` // -2=no tax, -1=not declared, 0,5,8,10
+	TaxPercentage                *float64 `json:"taxPercentage,omitempty" validate:"omitempty,gte=-2"`
 	TaxAmount                    *float64 `json:"taxAmount,omitempty"`
-	Discount                     *float64 `json:"discount,omitempty"`     // % discount on unit price
-	Discount2                    *float64 `json:"discount2,omitempty"`    // second % discount on unit price
-	ItemDiscount                 *float64 `json:"itemDiscount,omitempty"` // discount amount (system-calculated)
-	ItemNote                     string   `json:"itemNote,omitempty"`     // max 300
-	IsIncreaseItem               *bool    `json:"isIncreaseItem,omitempty"` // nil=normal, false=decrease, true=increase
-	BatchNo                      string   `json:"batchNo,omitempty"`      // max 300
-	ExpDate                      string   `json:"expDate,omitempty"`      // max 50
-	AdjustRatio                  string   `json:"adjustRatio,omitempty"`  // "1","2","3","5"; used with adjustAmount20="0"
-	SpecialInfo                  []SpecialInfoItem `json:"specialInfo,omitempty"` // required when selection=6 (ND70)
+	Discount                     *float64 `json:"discount,omitempty" validate:"omitempty,gte=0"`
+	Discount2                    *float64 `json:"discount2,omitempty" validate:"omitempty,gte=0"`
+	ItemDiscount                 *float64 `json:"itemDiscount,omitempty"`
+	ItemNote                     string   `json:"itemNote,omitempty" validate:"max=300"`
+	IsIncreaseItem               *bool    `json:"isIncreaseItem,omitempty"`
+	BatchNo                      string   `json:"batchNo,omitempty" validate:"max=300"`
+	ExpDate                      string   `json:"expDate,omitempty" validate:"max=50"`
+	AdjustRatio                  string   `json:"adjustRatio,omitempty" validate:"omitempty,oneof=1 2 3 5"`
+	SpecialInfo                  []SpecialInfoItem `json:"specialInfo,omitempty" validate:"omitempty,dive"`
 }
 
 // SpecialInfoItem represents a special goods attribute per ND70.
 type SpecialInfoItem struct {
-	Name  string `json:"name,omitempty"`
-	Value string `json:"value,omitempty"`
+	Name  string `json:"name,omitempty" validate:"required"`
+	Value string `json:"value,omitempty" validate:"required"`
 }
 
 // TaxBreakdown groups tax amounts by tax rate (§6.7).
@@ -312,6 +312,35 @@ type InvoiceListRow struct {
 // ViettelDraftRequest is identical to ViettelInvoiceRequest.
 // Uses endpoint: createOrUpdateInvoiceDraft/{supplierTaxCode}
 type ViettelDraftRequest = ViettelInvoiceRequest
+
+// ---------------------------------------------------------------------------
+// Send Invoice to Tax Authority request/response (§7.36)
+// ---------------------------------------------------------------------------
+
+// SendToTaxRequest is the form data for sendInvoiceByTransactionUuid.
+type SendToTaxRequest struct {
+	SupplierTaxCode string `json:"supplierTaxCode"` // required; seller tax code
+	TransactionUuid string `json:"transactionUuid"` // required; comma-separated UUIDs (10-36 chars each)
+	StartDate       string `json:"startDate"`       // required; format "2019-05-12"
+	EndDate         string `json:"endDate"`         // required; format "2019-05-12"
+}
+
+// ErrorDetail represents a single error entry in SendToTaxResponse.ErrorList.
+type ErrorDetail struct {
+	TransactionUuid string `json:"transactionUuid"` // comma-separated UUIDs that share this error
+	Detail          string `json:"detail"`           // error description
+	Message         string `json:"message"`          // error code (e.g. "INVOCIE_NOT_FOUND")
+}
+
+// SendToTaxResponse is the JSON returned by sendInvoiceByTransactionUuid (§7.36).
+type SendToTaxResponse struct {
+	ErrorCode   *string       `json:"errorCode"`
+	Description *string       `json:"description"`
+	Total       string        `json:"total"`   // total invoice count
+	Success     string        `json:"success"` // successful count
+	Fail        string        `json:"fail"`    // failed count
+	ErrorList   []ErrorDetail `json:"errorlist"`
+}
 
 // ---------------------------------------------------------------------------
 // Viettel API error codes (BAD_REQUEST / HTTP 400)

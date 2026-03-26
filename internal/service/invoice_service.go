@@ -242,6 +242,26 @@ func (s *InvoiceService) SubmitInvoice(ctx context.Context, id uuid.UUID) error 
 	return nil
 }
 
+// SendInvoiceToTax sends a completed invoice to the tax authority (CQT).
+func (s *InvoiceService) SendInvoiceToTax(ctx context.Context, transactionUuid, startDate, endDate string) (int, int, error) {
+	successCount, errorCount, err := s.publisher.SendToTax(ctx, transactionUuid, startDate, endDate)
+	if err != nil {
+		s.log.Error().Err(err).
+			Str("transaction_uuid", transactionUuid).
+			Int("success", successCount).
+			Int("errors", errorCount).
+			Msg("Failed to send invoice to tax authority")
+		return successCount, errorCount, err
+	}
+
+	s.log.Info().
+		Str("transaction_uuid", transactionUuid).
+		Int("success", successCount).
+		Msg("Invoice sent to tax authority")
+
+	return successCount, errorCount, nil
+}
+
 // recalculateTotals updates the invoice totals from its items.
 func (s *InvoiceService) recalculateTotals(ctx context.Context, invoiceID uuid.UUID) error {
 	items, err := s.repo.GetItemsByInvoiceID(ctx, invoiceID)

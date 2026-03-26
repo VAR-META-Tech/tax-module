@@ -46,6 +46,7 @@ type ThirdPartyConfig struct {
 	AuthURL           string        `mapstructure:"THIRD_PARTY_AUTH_URL"`
 	CreateInvoicePath string        `mapstructure:"THIRD_PARTY_CREATE_PATH"`
 	QueryStatusPath   string        `mapstructure:"THIRD_PARTY_QUERY_PATH"`
+	SendToTaxPath     string        `mapstructure:"THIRD_PARTY_SEND_TO_TAX_PATH"`
 	SupplierCode      string        `mapstructure:"THIRD_PARTY_SUPPLIER_CODE"`
 	Username          string        `mapstructure:"THIRD_PARTY_USERNAME"`
 	Password          string        `mapstructure:"THIRD_PARTY_PASSWORD"`
@@ -101,6 +102,7 @@ func Load() (*Config, error) {
 	viper.SetDefault("THIRD_PARTY_AUTH_URL", "https://api-vinvoice.viettel.vn/auth/login")
 	viper.SetDefault("THIRD_PARTY_CREATE_PATH", "/InvoiceAPI/InvoiceWS/createInvoice")
 	viper.SetDefault("THIRD_PARTY_QUERY_PATH", "/InvoiceAPI/InvoiceWS/searchInvoiceByTransactionUuid")
+	viper.SetDefault("THIRD_PARTY_SEND_TO_TAX_PATH", "/InvoiceAPI/InvoiceWS/sendInvoiceByTransactionUuid")
 	viper.SetDefault("THIRD_PARTY_SUPPLIER_CODE", "")
 	viper.SetDefault("THIRD_PARTY_USERNAME", "")
 	viper.SetDefault("THIRD_PARTY_PASSWORD", "")
@@ -157,6 +159,7 @@ func Load() (*Config, error) {
 			AuthURL:           viper.GetString("THIRD_PARTY_AUTH_URL"),
 			CreateInvoicePath: viper.GetString("THIRD_PARTY_CREATE_PATH"),
 			QueryStatusPath:   viper.GetString("THIRD_PARTY_QUERY_PATH"),
+			SendToTaxPath:     viper.GetString("THIRD_PARTY_SEND_TO_TAX_PATH"),
 			SupplierCode:      viper.GetString("THIRD_PARTY_SUPPLIER_CODE"),
 			Username:          viper.GetString("THIRD_PARTY_USERNAME"),
 			Password:          viper.GetString("THIRD_PARTY_PASSWORD"),

@@ -246,6 +246,35 @@ func (r *InvoiceRepo) GetByExternalID(ctx context.Context, externalID string) (*
 	return &inv, nil
 }
 
+func (r *InvoiceRepo) GetByTransactionUuid(ctx context.Context, transactionUuid string) (*domain.Invoice, error) {
+	query := `
+		SELECT id, external_id, transaction_uuid, status, customer_name, customer_tax_id,
+			customer_address, currency, original_currency, exchange_rate,
+			total_amount, tax_amount, net_amount,
+			original_total_amount, original_tax_amount, original_net_amount,
+			transaction_hash, notes, issued_at, due_at, submitted_at, completed_at,
+			retry_count, last_error, metadata, created_at, updated_at
+		FROM invoices WHERE transaction_uuid = $1`
+
+	var inv domain.Invoice
+	err := r.pool.QueryRow(ctx, query, transactionUuid).Scan(
+		&inv.ID, &inv.ExternalID, &inv.TransactionUuid, &inv.Status,
+		&inv.CustomerName, &inv.CustomerTaxID, &inv.CustomerAddress,
+		&inv.Currency, &inv.OriginalCurrency, &inv.ExchangeRate,
+		&inv.TotalAmount, &inv.TaxAmount, &inv.NetAmount,
+		&inv.OriginalTotalAmount, &inv.OriginalTaxAmount, &inv.OriginalNetAmount,
+		&inv.TransactionHash, &inv.Notes, &inv.IssuedAt, &inv.DueAt, &inv.SubmittedAt, &inv.CompletedAt,
+		&inv.RetryCount, &inv.LastError, &inv.Metadata, &inv.CreatedAt, &inv.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.NewNotFoundError("invoice not found for transaction_uuid: " + transactionUuid)
+		}
+		return nil, domain.NewInternalError("failed to get invoice by transaction_uuid", err)
+	}
+	return &inv, nil
+}
+
 func (r *InvoiceRepo) GetPendingPolling(ctx context.Context, limit int) ([]*domain.Invoice, error) {
 	query := `
 		SELECT id, external_id, transaction_uuid, status, customer_name, customer_tax_id,

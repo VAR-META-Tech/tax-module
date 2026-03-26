@@ -180,7 +180,7 @@ func TestViettelClient_401Retry(t *testing.T) {
 
 	client := NewViettelClient(cfg, newMemTokenRepo(), &log)
 
-	body, err := client.doAuthenticatedRequest(context.Background(), http.MethodGet, server.URL+"/api/test", nil)
+	body, err := client.doAuthenticatedRequest(context.Background(), http.MethodGet, server.URL+"/api/test", "application/json", nil)
 	if err != nil {
 		t.Fatalf("doAuthenticatedRequest: %v", err)
 	}
@@ -338,5 +338,200 @@ func TestViettelPublisher_QueryStatus_Pending(t *testing.T) {
 	}
 	if status != "pending" {
 		t.Errorf("status = %q, want %q", status, "pending")
+	}
+}
+
+// --- SendToTax tests ---
+
+func TestViettelClient_SendToTaxByTransactionUuid(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/auth/login", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(AuthResponse{AccessToken: "tok", ExpiresIn: 3600})
+	})
+
+	mux.HandleFunc("/api/InvoiceAPI/InvoiceWS/sendInvoiceByTransactionUuid", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("expected POST, got %s", r.Method)
+		}
+
+		ct := r.Header.Get("Content-Type")
+		if ct != "application/x-www-form-urlencoded" {
+			t.Errorf("Content-Type = %q, want %q", ct, "application/x-www-form-urlencoded")
+		}
+
+		cookie := r.Header.Get("Cookie")
+		if cookie != "access_token=tok" {
+			t.Errorf("Cookie = %q, want %q", cookie, "access_token=tok")
+		}
+
+		if err := r.ParseForm(); err != nil {
+			t.Fatalf("ParseForm: %v", err)
+		}
+		if r.FormValue("supplierTaxCode") != "TAX123" {
+			t.Errorf("supplierTaxCode = %q, want %q", r.FormValue("supplierTaxCode"), "TAX123")
+		}
+		if r.FormValue("transactionUuid") != "txn-abc" {
+			t.Errorf("transactionUuid = %q, want %q", r.FormValue("transactionUuid"), "txn-abc")
+		}
+		if r.FormValue("startDate") != "2025-01-01" {
+			t.Errorf("startDate = %q, want %q", r.FormValue("startDate"), "2025-01-01")
+		}
+		if r.FormValue("endDate") != "2025-01-01" {
+			t.Errorf("endDate = %q, want %q", r.FormValue("endDate"), "2025-01-01")
+		}
+
+		resp := SendToTaxResponse{
+			Total:     "1",
+			Success:   "1",
+			Fail:      "0",
+			ErrorList: []ErrorDetail{},
+		}
+		json.NewEncoder(w).Encode(resp)
+	})
+
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	log := zerolog.Nop()
+	cfg := config.ThirdPartyConfig{
+		BaseURL:       server.URL + "/api",
+		AuthURL:       server.URL + "/auth/login",
+		SendToTaxPath: "/InvoiceAPI/InvoiceWS/sendInvoiceByTransactionUuid",
+		SupplierCode:  "TAX123",
+		Username:      "u",
+		Password:      "p",
+		Timeout:       5e9,
+	}
+
+	client := NewViettelClient(cfg, newMemTokenRepo(), &log)
+
+	req := &SendToTaxRequest{
+		SupplierTaxCode: "TAX123",
+		TransactionUuid: "txn-abc",
+		StartDate:       "2025-01-01",
+		EndDate:         "2025-01-01",
+	}
+	resp, err := client.SendToTaxByTransactionUuid(context.Background(), req)
+	if err != nil {
+		t.Fatalf("SendToTaxByTransactionUuid: %v", err)
+	}
+	if resp.Success != "1" {
+		t.Errorf("Success = %q, want %q", resp.Success, "1")
+	}
+	if resp.Fail != "0" {
+		t.Errorf("Fail = %q, want %q", resp.Fail, "0")
+	}
+}
+
+func TestViettelPublisher_SendToTax_Success(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/auth/login", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(AuthResponse{AccessToken: "tok", ExpiresIn: 3600})
+	})
+
+	mux.HandleFunc("/api/InvoiceAPI/InvoiceWS/sendInvoiceByTransactionUuid", func(w http.ResponseWriter, r *http.Request) {
+		resp := SendToTaxResponse{
+			Total:     "1",
+			Success:   "1",
+			Fail:      "0",
+			ErrorList: []ErrorDetail{},
+		}
+		json.NewEncoder(w).Encode(resp)
+	})
+
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	log := zerolog.Nop()
+	cfg := config.ThirdPartyConfig{
+		BaseURL:       server.URL + "/api",
+		AuthURL:       server.URL + "/auth/login",
+		SendToTaxPath: "/InvoiceAPI/InvoiceWS/sendInvoiceByTransactionUuid",
+		SupplierCode:  "TAX123",
+		Username:      "u",
+		Password:      "p",
+		Timeout:       5e9,
+	}
+
+	client := NewViettelClient(cfg, newMemTokenRepo(), &log)
+	publisher := NewViettelPublisher(client, cfg, config.SellerConfig{}, &log)
+
+	txnUuid := "txn-abc-123"
+
+	successCount, errorCount, err := publisher.SendToTax(context.Background(), txnUuid, "2026-03-01", "2026-03-31")
+	if err != nil {
+		t.Fatalf("SendToTax: %v", err)
+	}
+	if successCount != 1 {
+		t.Errorf("successCount = %d, want 1", successCount)
+	}
+	if errorCount != 0 {
+		t.Errorf("errorCount = %d, want 0", errorCount)
+	}
+}
+
+func TestViettelPublisher_SendToTax_PartialFailure(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/auth/login", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(AuthResponse{AccessToken: "tok", ExpiresIn: 3600})
+	})
+
+	mux.HandleFunc("/api/InvoiceAPI/InvoiceWS/sendInvoiceByTransactionUuid", func(w http.ResponseWriter, r *http.Request) {
+		resp := SendToTaxResponse{
+			Total:   "2",
+			Success: "1",
+			Fail:    "1",
+			ErrorList: []ErrorDetail{
+				{
+					TransactionUuid: "txn-fail",
+					Detail:          "Không tìm thấy bản ghi cần gửi sang CQT",
+					Message:         "INVOCIE_NOT_FOUND",
+				},
+			},
+		}
+		json.NewEncoder(w).Encode(resp)
+	})
+
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	log := zerolog.Nop()
+	cfg := config.ThirdPartyConfig{
+		BaseURL:       server.URL + "/api",
+		AuthURL:       server.URL + "/auth/login",
+		SendToTaxPath: "/InvoiceAPI/InvoiceWS/sendInvoiceByTransactionUuid",
+		SupplierCode:  "TAX123",
+		Username:      "u",
+		Password:      "p",
+		Timeout:       5e9,
+	}
+
+	client := NewViettelClient(cfg, newMemTokenRepo(), &log)
+	publisher := NewViettelPublisher(client, cfg, config.SellerConfig{}, &log)
+
+	txnUuid := "txn-abc-123"
+
+	successCount, errorCount, err := publisher.SendToTax(context.Background(), txnUuid, "2026-03-01", "2026-03-31")
+	if err == nil {
+		t.Fatal("expected error for partial failure, got nil")
+	}
+	if successCount != 1 {
+		t.Errorf("successCount = %d, want 1", successCount)
+	}
+	if errorCount != 1 {
+		t.Errorf("errorCount = %d, want 1", errorCount)
+	}
+}
+
+func TestViettelPublisher_SendToTax_EmptyTransactionUuid(t *testing.T) {
+	log := zerolog.Nop()
+	cfg := config.ThirdPartyConfig{}
+	client := NewViettelClient(cfg, newMemTokenRepo(), &log)
+	publisher := NewViettelPublisher(client, cfg, config.SellerConfig{}, &log)
+
+	// Calling with empty transactionUuid will fail at the HTTP call level
+	_, _, err := publisher.SendToTax(context.Background(), "", "2026-03-01", "2026-03-31")
+	if err == nil {
+		t.Fatal("expected error for empty transaction_uuid, got nil")
 	}
 }

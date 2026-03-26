@@ -3,6 +3,7 @@ package integration
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 
 	"github.com/rs/zerolog"
 
@@ -27,6 +28,10 @@ func NewViettelPublisher(client *ViettelClient, cfg config.ThirdPartyConfig, sel
 func (p *ViettelPublisher) CreateInvoice(ctx context.Context, invoice *domain.Invoice) (string, error) {
 	viettelReq := MapInvoiceToViettel(invoice, p.cfg, p.sellerCfg)
 	transactionUuid := viettelReq.GeneralInvoiceInfo.TransactionUuid
+
+	if err := ValidateViettelRequest(viettelReq); err != nil {
+		return "", domain.NewValidationError(err.Error())
+	}
 
 	invoice.TransactionUuid = &transactionUuid
 
@@ -96,4 +101,47 @@ func (p *ViettelPublisher) QueryStatus(ctx context.Context, externalID string) (
 	}
 
 	return "processing", rawResponse, nil
+}
+
+// SendToTax sends a completed invoice to the tax authority (CQT) via Viettel (§7.36).
+func (p *ViettelPublisher) SendToTax(ctx context.Context, transactionUuid, startDate, endDate string) (int, int, error) {
+	req := &SendToTaxRequest{
+		SupplierTaxCode: p.cfg.SupplierCode,
+		TransactionUuid: transactionUuid,
+		StartDate:       startDate,
+		EndDate:         endDate,
+	}
+
+	p.log.Info().
+		Str("transaction_uuid", transactionUuid).
+		Str("start_date", startDate).
+		Str("end_date", endDate).
+		Msg("Sending invoice to tax authority (CQT)")
+
+	resp, err := p.client.SendToTaxByTransactionUuid(ctx, req)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	successCount, _ := strconv.Atoi(resp.Success)
+	errorCount, _ := strconv.Atoi(resp.Fail)
+
+	if errorCount > 0 && len(resp.ErrorList) > 0 {
+		for _, e := range resp.ErrorList {
+			p.log.Warn().
+				Str("transaction_uuid", e.TransactionUuid).
+				Str("message", e.Message).
+				Str("detail", e.Detail).
+				Msg("Send to tax error detail")
+		}
+		return successCount, errorCount, domain.NewThirdPartyError(
+			"send to tax failed: "+resp.ErrorList[0].Detail, nil)
+	}
+
+	p.log.Info().
+		Str("transaction_uuid", transactionUuid).
+		Int("success", successCount).
+		Msg("Invoice sent to tax authority successfully")
+
+	return successCount, errorCount, nil
 }

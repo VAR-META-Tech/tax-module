@@ -141,4 +141,5 @@ type AuditLog struct {
 type InvoicePublisher interface {
 	CreateInvoice(ctx context.Context, invoice *Invoice) (externalID string, err error)
 	QueryStatus(ctx context.Context, externalID string) (status string, rawResponse []byte, err error)
+	SendToTax(ctx context.Context, transactionUuid, startDate, endDate string) (successCount, errorCount int, err error)
 }
