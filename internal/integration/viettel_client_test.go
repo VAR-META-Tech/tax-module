@@ -238,14 +238,14 @@ func TestViettelPublisher_CreateInvoice(t *testing.T) {
 	publisher := NewViettelPublisher(client, cfg, config.SellerConfig{}, &log)
 
 	invoice := &domain.Invoice{
-		ID:           uuid.New(),
-		CustomerName: "Test Corp",
-		Currency:     "VND",
-		TotalAmount:  11000,
-		TaxAmount:    1000,
-		NetAmount:    10000,
+		ID:                    uuid.New(),
+		BuyerLegalName:        "Test Corp",
+		Currency:              "VND",
+		TotalAmountWithTax:    11000,
+		TotalTaxAmount:        1000,
+		TotalAmountWithoutTax: 10000,
 		Items: []*domain.InvoiceItem{
-			{Description: "Service", Quantity: 1, UnitPrice: 10000, TaxRate: 10, TaxAmount: 1000, LineTotal: 11000},
+			{ItemName: "Service", Quantity: 1, UnitPrice: 10000, TaxPercentage: 10, TaxAmount: 1000, ItemTotalAmountWithoutTax: 10000, ItemTotalAmountWithTax: 11000},
 		},
 	}
 

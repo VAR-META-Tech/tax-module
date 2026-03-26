@@ -44,7 +44,10 @@ func (r *mockInvoiceRepo) GetByID(_ context.Context, id uuid.UUID) (*domain.Invo
 	return nil, domain.NewNotFoundError("invoice not found")
 }
 
-func (r *mockInvoiceRepo) Create(_ context.Context, _ *domain.Invoice) error              { return nil }
+func (r *mockInvoiceRepo) Create(_ context.Context, _ *domain.Invoice) error { return nil }
+func (r *mockInvoiceRepo) CreateWithItems(_ context.Context, _ *domain.Invoice) error {
+	return nil
+}
 func (r *mockInvoiceRepo) Update(_ context.Context, _ *domain.Invoice) error              { return nil }
 func (r *mockInvoiceRepo) List(_ context.Context, _ domain.InvoiceFilter) ([]*domain.Invoice, int64, error) {
 	return nil, 0, nil

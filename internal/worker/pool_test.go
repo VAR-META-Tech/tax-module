@@ -65,6 +65,17 @@ func (r *mockRepo) Create(_ context.Context, inv *domain.Invoice) error {
 	return nil
 }
 
+func (r *mockRepo) CreateWithItems(_ context.Context, inv *domain.Invoice) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.invoices[inv.ID] = inv
+	r.statuses[inv.ID] = inv.Status
+	for _, item := range inv.Items {
+		r.items[inv.ID] = append(r.items[inv.ID], item)
+	}
+	return nil
+}
+
 func (r *mockRepo) GetByID(_ context.Context, id uuid.UUID) (*domain.Invoice, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -167,7 +178,7 @@ func TestPool_PublishInvoice(t *testing.T) {
 	inv := &domain.Invoice{ID: invID, Status: domain.StatusSubmitted, Currency: "VND"}
 	repo.Create(context.Background(), inv)
 	repo.items[invID] = []*domain.InvoiceItem{
-		{ID: uuid.New(), InvoiceID: invID, Description: "Test", Quantity: 1, UnitPrice: 1000},
+		{ID: uuid.New(), InvoiceID: invID, ItemName: "Test", Quantity: 1, UnitPrice: 1000, ItemTotalAmountWithoutTax: 1000},
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -217,7 +228,7 @@ func TestPool_PublishError_Retry(t *testing.T) {
 	inv := &domain.Invoice{ID: invID, Status: domain.StatusSubmitted, Currency: "VND"}
 	repo.Create(context.Background(), inv)
 	repo.items[invID] = []*domain.InvoiceItem{
-		{ID: uuid.New(), InvoiceID: invID, Description: "Test", Quantity: 1, UnitPrice: 1000},
+		{ID: uuid.New(), InvoiceID: invID, ItemName: "Test", Quantity: 1, UnitPrice: 1000, ItemTotalAmountWithoutTax: 1000},
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

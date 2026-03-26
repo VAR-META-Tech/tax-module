@@ -11,6 +11,7 @@ import (
 type InvoiceRepository interface {
 	// Invoice CRUD
 	Create(ctx context.Context, invoice *Invoice) error
+	CreateWithItems(ctx context.Context, invoice *Invoice) error
 	GetByID(ctx context.Context, id uuid.UUID) (*Invoice, error)
 	Update(ctx context.Context, invoice *Invoice) error
 	UpdateStatus(ctx context.Context, id uuid.UUID, status InvoiceStatus, reason string) error

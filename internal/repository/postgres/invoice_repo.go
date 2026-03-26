@@ -26,25 +26,57 @@ func NewInvoiceRepo(pool *pgxpool.Pool, log *zerolog.Logger) *InvoiceRepo {
 	return &InvoiceRepo{pool: pool, log: log}
 }
 
+// invoiceColumns is the shared column list for SELECT queries on the invoices table.
+const invoiceColumns = `id, external_id, transaction_uuid, status,
+	buyer_name, buyer_legal_name, buyer_tax_code, buyer_address,
+	buyer_email, buyer_phone, buyer_code,
+	currency, total_amount_with_tax, total_tax_amount, total_amount_without_tax,
+	token_currency, exchange_rate, exchange_rate_source, hbar_amount,
+	token_total_amount, token_tax_amount, token_net_amount,
+	payment_method, transaction_hash, erp_order_id,
+	notes, issued_at, submitted_at, completed_at,
+	retry_count, last_error, metadata, created_at, updated_at`
+
+// scanInvoice scans a row into a domain.Invoice using the standard column order.
+func scanInvoice(row interface{ Scan(dest ...any) error }) (*domain.Invoice, error) {
+	var inv domain.Invoice
+	err := row.Scan(
+		&inv.ID, &inv.ExternalID, &inv.TransactionUuid, &inv.Status,
+		&inv.BuyerName, &inv.BuyerLegalName, &inv.BuyerTaxCode, &inv.BuyerAddress,
+		&inv.BuyerEmail, &inv.BuyerPhone, &inv.BuyerCode,
+		&inv.Currency, &inv.TotalAmountWithTax, &inv.TotalTaxAmount, &inv.TotalAmountWithoutTax,
+		&inv.TokenCurrency, &inv.ExchangeRate, &inv.ExchangeRateSource, &inv.HbarAmount,
+		&inv.TokenTotalAmount, &inv.TokenTaxAmount, &inv.TokenNetAmount,
+		&inv.PaymentMethod, &inv.TransactionHash, &inv.ErpOrderID,
+		&inv.Notes, &inv.IssuedAt, &inv.SubmittedAt, &inv.CompletedAt,
+		&inv.RetryCount, &inv.LastError, &inv.Metadata, &inv.CreatedAt, &inv.UpdatedAt,
+	)
+	return &inv, err
+}
+
 // --- Invoice CRUD ---
 
 func (r *InvoiceRepo) Create(ctx context.Context, invoice *domain.Invoice) error {
 	query := `
-		INSERT INTO invoices (id, external_id, transaction_uuid, status, customer_name, customer_tax_id,
-			customer_address, currency, original_currency, exchange_rate,
-			total_amount, tax_amount, net_amount,
-			original_total_amount, original_tax_amount, original_net_amount,
-			transaction_hash, notes, issued_at, due_at, metadata, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)`
+		INSERT INTO invoices (id, external_id, transaction_uuid, status,
+			buyer_name, buyer_legal_name, buyer_tax_code, buyer_address,
+			buyer_email, buyer_phone, buyer_code,
+			currency, total_amount_with_tax, total_tax_amount, total_amount_without_tax,
+			token_currency, exchange_rate, exchange_rate_source, hbar_amount,
+			token_total_amount, token_tax_amount, token_net_amount,
+			payment_method, transaction_hash, erp_order_id,
+			notes, issued_at, metadata, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30)`
 
 	_, err := r.pool.Exec(ctx, query,
 		invoice.ID, invoice.ExternalID, invoice.TransactionUuid, invoice.Status,
-		invoice.CustomerName, invoice.CustomerTaxID, invoice.CustomerAddress,
-		invoice.Currency, invoice.OriginalCurrency, invoice.ExchangeRate,
-		invoice.TotalAmount, invoice.TaxAmount, invoice.NetAmount,
-		invoice.OriginalTotalAmount, invoice.OriginalTaxAmount, invoice.OriginalNetAmount,
-		invoice.TransactionHash, invoice.Notes, invoice.IssuedAt, invoice.DueAt,
-		invoice.Metadata, invoice.CreatedAt, invoice.UpdatedAt,
+		invoice.BuyerName, invoice.BuyerLegalName, invoice.BuyerTaxCode, invoice.BuyerAddress,
+		invoice.BuyerEmail, invoice.BuyerPhone, invoice.BuyerCode,
+		invoice.Currency, invoice.TotalAmountWithTax, invoice.TotalTaxAmount, invoice.TotalAmountWithoutTax,
+		invoice.TokenCurrency, invoice.ExchangeRate, invoice.ExchangeRateSource, invoice.HbarAmount,
+		invoice.TokenTotalAmount, invoice.TokenTaxAmount, invoice.TokenNetAmount,
+		invoice.PaymentMethod, invoice.TransactionHash, invoice.ErpOrderID,
+		invoice.Notes, invoice.IssuedAt, invoice.Metadata, invoice.CreatedAt, invoice.UpdatedAt,
 	)
 	if err != nil {
 		return domain.NewInternalError("failed to create invoice", err)
@@ -52,55 +84,115 @@ func (r *InvoiceRepo) Create(ctx context.Context, invoice *domain.Invoice) error
 	return nil
 }
 
-func (r *InvoiceRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Invoice, error) {
-	query := `
-		SELECT id, external_id, transaction_uuid, status, customer_name, customer_tax_id,
-			customer_address, currency, original_currency, exchange_rate,
-			total_amount, tax_amount, net_amount,
-			original_total_amount, original_tax_amount, original_net_amount,
-			transaction_hash, notes, issued_at, due_at, submitted_at, completed_at,
-			retry_count, last_error, metadata, created_at, updated_at
-		FROM invoices WHERE id = $1`
+func (r *InvoiceRepo) CreateWithItems(ctx context.Context, invoice *domain.Invoice) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return domain.NewInternalError("failed to begin transaction", err)
+	}
+	defer tx.Rollback(ctx)
 
-	var inv domain.Invoice
-	err := r.pool.QueryRow(ctx, query, id).Scan(
-		&inv.ID, &inv.ExternalID, &inv.TransactionUuid, &inv.Status,
-		&inv.CustomerName, &inv.CustomerTaxID, &inv.CustomerAddress,
-		&inv.Currency, &inv.OriginalCurrency, &inv.ExchangeRate,
-		&inv.TotalAmount, &inv.TaxAmount, &inv.NetAmount,
-		&inv.OriginalTotalAmount, &inv.OriginalTaxAmount, &inv.OriginalNetAmount,
-		&inv.TransactionHash, &inv.Notes, &inv.IssuedAt, &inv.DueAt, &inv.SubmittedAt, &inv.CompletedAt,
-		&inv.RetryCount, &inv.LastError, &inv.Metadata, &inv.CreatedAt, &inv.UpdatedAt,
+	invoiceQuery := `
+		INSERT INTO invoices (id, external_id, transaction_uuid, status,
+			buyer_name, buyer_legal_name, buyer_tax_code, buyer_address,
+			buyer_email, buyer_phone, buyer_code,
+			currency, total_amount_with_tax, total_tax_amount, total_amount_without_tax,
+			token_currency, exchange_rate, exchange_rate_source, hbar_amount,
+			token_total_amount, token_tax_amount, token_net_amount,
+			payment_method, transaction_hash, erp_order_id,
+			notes, issued_at, metadata, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30)`
+
+	_, err = tx.Exec(ctx, invoiceQuery,
+		invoice.ID, invoice.ExternalID, invoice.TransactionUuid, invoice.Status,
+		invoice.BuyerName, invoice.BuyerLegalName, invoice.BuyerTaxCode, invoice.BuyerAddress,
+		invoice.BuyerEmail, invoice.BuyerPhone, invoice.BuyerCode,
+		invoice.Currency, invoice.TotalAmountWithTax, invoice.TotalTaxAmount, invoice.TotalAmountWithoutTax,
+		invoice.TokenCurrency, invoice.ExchangeRate, invoice.ExchangeRateSource, invoice.HbarAmount,
+		invoice.TokenTotalAmount, invoice.TokenTaxAmount, invoice.TokenNetAmount,
+		invoice.PaymentMethod, invoice.TransactionHash, invoice.ErpOrderID,
+		invoice.Notes, invoice.IssuedAt, invoice.Metadata, invoice.CreatedAt, invoice.UpdatedAt,
 	)
+	if err != nil {
+		return domain.NewInternalError("failed to create invoice", err)
+	}
+
+	itemQuery := `
+		INSERT INTO invoice_items (id, invoice_id, item_name, quantity, unit_price,
+			tax_percentage, tax_amount, item_total_amount_without_tax,
+			item_total_amount_with_tax, item_total_amount_after_discount, item_discount,
+			token_unit_price, token_tax_amount, token_line_total,
+			line_number, created_at,
+			selection, item_type, item_code, unit_code, unit_name,
+			discount, discount2, item_note, is_increase_item,
+			batch_no, exp_date, adjust_ratio, unit_price_with_tax, special_info)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
+			$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30)`
+
+	for _, item := range invoice.Items {
+		specialInfoJSON, err := json.Marshal(item.SpecialInfo)
+		if err != nil {
+			return domain.NewInternalError("failed to marshal special_info", err)
+		}
+
+		_, err = tx.Exec(ctx, itemQuery,
+			item.ID, item.InvoiceID, item.ItemName, item.Quantity, item.UnitPrice,
+			item.TaxPercentage, item.TaxAmount, item.ItemTotalAmountWithoutTax,
+			item.ItemTotalAmountWithTax, item.ItemTotalAmountAfterDiscount, item.ItemDiscount,
+			item.TokenUnitPrice, item.TokenTaxAmount, item.TokenLineTotal,
+			item.LineNumber, item.CreatedAt,
+			item.Selection, item.ItemType, item.ItemCode, item.UnitCode, item.UnitName,
+			item.Discount, item.Discount2, item.ItemNote, item.IsIncreaseItem,
+			item.BatchNo, item.ExpDate, item.AdjustRatio, item.UnitPriceWithTax, specialInfoJSON,
+		)
+		if err != nil {
+			return domain.NewInternalError("failed to add item", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return domain.NewInternalError("failed to commit transaction", err)
+	}
+	return nil
+}
+
+func (r *InvoiceRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Invoice, error) {
+	query := `SELECT ` + invoiceColumns + ` FROM invoices WHERE id = $1`
+
+	row := r.pool.QueryRow(ctx, query, id)
+	inv, err := scanInvoice(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.NewNotFoundError("invoice not found")
 		}
 		return nil, domain.NewInternalError("failed to get invoice", err)
 	}
-	return &inv, nil
+	return inv, nil
 }
 
 func (r *InvoiceRepo) Update(ctx context.Context, invoice *domain.Invoice) error {
 	query := `
 		UPDATE invoices SET
 			external_id=$1, transaction_uuid=$2,
-			customer_name=$3, customer_tax_id=$4, customer_address=$5,
-			currency=$6, original_currency=$7, exchange_rate=$8,
-			total_amount=$9, tax_amount=$10, net_amount=$11,
-			original_total_amount=$12, original_tax_amount=$13, original_net_amount=$14,
-			transaction_hash=$15, notes=$16, issued_at=$17, due_at=$18,
-			submitted_at=$19, completed_at=$20, retry_count=$21, last_error=$22,
-			metadata=$23, updated_at=$24
-		WHERE id = $25`
+			buyer_name=$3, buyer_legal_name=$4, buyer_tax_code=$5, buyer_address=$6,
+			buyer_email=$7, buyer_phone=$8, buyer_code=$9,
+			currency=$10, total_amount_with_tax=$11, total_tax_amount=$12, total_amount_without_tax=$13,
+			token_currency=$14, exchange_rate=$15, exchange_rate_source=$16, hbar_amount=$17,
+			token_total_amount=$18, token_tax_amount=$19, token_net_amount=$20,
+			payment_method=$21, transaction_hash=$22, erp_order_id=$23,
+			notes=$24, issued_at=$25,
+			submitted_at=$26, completed_at=$27, retry_count=$28, last_error=$29,
+			metadata=$30, updated_at=$31
+		WHERE id = $32`
 
 	tag, err := r.pool.Exec(ctx, query,
 		invoice.ExternalID, invoice.TransactionUuid,
-		invoice.CustomerName, invoice.CustomerTaxID, invoice.CustomerAddress,
-		invoice.Currency, invoice.OriginalCurrency, invoice.ExchangeRate,
-		invoice.TotalAmount, invoice.TaxAmount, invoice.NetAmount,
-		invoice.OriginalTotalAmount, invoice.OriginalTaxAmount, invoice.OriginalNetAmount,
-		invoice.TransactionHash, invoice.Notes, invoice.IssuedAt, invoice.DueAt,
+		invoice.BuyerName, invoice.BuyerLegalName, invoice.BuyerTaxCode, invoice.BuyerAddress,
+		invoice.BuyerEmail, invoice.BuyerPhone, invoice.BuyerCode,
+		invoice.Currency, invoice.TotalAmountWithTax, invoice.TotalTaxAmount, invoice.TotalAmountWithoutTax,
+		invoice.TokenCurrency, invoice.ExchangeRate, invoice.ExchangeRateSource, invoice.HbarAmount,
+		invoice.TokenTotalAmount, invoice.TokenTaxAmount, invoice.TokenNetAmount,
+		invoice.PaymentMethod, invoice.TransactionHash, invoice.ErpOrderID,
+		invoice.Notes, invoice.IssuedAt,
 		invoice.SubmittedAt, invoice.CompletedAt, invoice.RetryCount, invoice.LastError,
 		invoice.Metadata, invoice.UpdatedAt, invoice.ID,
 	)
@@ -180,13 +272,7 @@ func (r *InvoiceRepo) List(ctx context.Context, filter domain.InvoiceFilter) ([]
 
 	// Fetch page
 	dataQuery := fmt.Sprintf(
-		`SELECT id, external_id, transaction_uuid, status, customer_name, customer_tax_id,
-			customer_address, currency, original_currency, exchange_rate,
-			total_amount, tax_amount, net_amount,
-			original_total_amount, original_tax_amount, original_net_amount,
-			transaction_hash, notes, issued_at, due_at, submitted_at, completed_at,
-			retry_count, last_error, metadata, created_at, updated_at
-		FROM invoices%s ORDER BY created_at DESC LIMIT $%d OFFSET $%d`,
+		`SELECT `+invoiceColumns+` FROM invoices%s ORDER BY created_at DESC LIMIT $%d OFFSET $%d`,
 		where, argIdx, argIdx+1,
 	)
 	args = append(args, filter.Limit, filter.Offset)
@@ -199,90 +285,46 @@ func (r *InvoiceRepo) List(ctx context.Context, filter domain.InvoiceFilter) ([]
 
 	var invoices []*domain.Invoice
 	for rows.Next() {
-		var inv domain.Invoice
-		if err := rows.Scan(
-			&inv.ID, &inv.ExternalID, &inv.TransactionUuid, &inv.Status,
-			&inv.CustomerName, &inv.CustomerTaxID, &inv.CustomerAddress,
-			&inv.Currency, &inv.OriginalCurrency, &inv.ExchangeRate,
-			&inv.TotalAmount, &inv.TaxAmount, &inv.NetAmount,
-			&inv.OriginalTotalAmount, &inv.OriginalTaxAmount, &inv.OriginalNetAmount,
-			&inv.TransactionHash, &inv.Notes, &inv.IssuedAt, &inv.DueAt, &inv.SubmittedAt, &inv.CompletedAt,
-			&inv.RetryCount, &inv.LastError, &inv.Metadata, &inv.CreatedAt, &inv.UpdatedAt,
-		); err != nil {
+		inv, err := scanInvoice(rows)
+		if err != nil {
 			return nil, 0, domain.NewInternalError("failed to scan invoice", err)
 		}
-		invoices = append(invoices, &inv)
+		invoices = append(invoices, inv)
 	}
 
 	return invoices, total, nil
 }
 
 func (r *InvoiceRepo) GetByExternalID(ctx context.Context, externalID string) (*domain.Invoice, error) {
-	query := `
-		SELECT id, external_id, transaction_uuid, status, customer_name, customer_tax_id,
-			customer_address, currency, original_currency, exchange_rate,
-			total_amount, tax_amount, net_amount,
-			original_total_amount, original_tax_amount, original_net_amount,
-			transaction_hash, notes, issued_at, due_at, submitted_at, completed_at,
-			retry_count, last_error, metadata, created_at, updated_at
-		FROM invoices WHERE external_id = $1`
+	query := `SELECT ` + invoiceColumns + ` FROM invoices WHERE external_id = $1`
 
-	var inv domain.Invoice
-	err := r.pool.QueryRow(ctx, query, externalID).Scan(
-		&inv.ID, &inv.ExternalID, &inv.TransactionUuid, &inv.Status,
-		&inv.CustomerName, &inv.CustomerTaxID, &inv.CustomerAddress,
-		&inv.Currency, &inv.OriginalCurrency, &inv.ExchangeRate,
-		&inv.TotalAmount, &inv.TaxAmount, &inv.NetAmount,
-		&inv.OriginalTotalAmount, &inv.OriginalTaxAmount, &inv.OriginalNetAmount,
-		&inv.TransactionHash, &inv.Notes, &inv.IssuedAt, &inv.DueAt, &inv.SubmittedAt, &inv.CompletedAt,
-		&inv.RetryCount, &inv.LastError, &inv.Metadata, &inv.CreatedAt, &inv.UpdatedAt,
-	)
+	row := r.pool.QueryRow(ctx, query, externalID)
+	inv, err := scanInvoice(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.NewNotFoundError("invoice not found for external_id: " + externalID)
 		}
 		return nil, domain.NewInternalError("failed to get invoice by external_id", err)
 	}
-	return &inv, nil
+	return inv, nil
 }
 
 func (r *InvoiceRepo) GetByTransactionUuid(ctx context.Context, transactionUuid string) (*domain.Invoice, error) {
-	query := `
-		SELECT id, external_id, transaction_uuid, status, customer_name, customer_tax_id,
-			customer_address, currency, original_currency, exchange_rate,
-			total_amount, tax_amount, net_amount,
-			original_total_amount, original_tax_amount, original_net_amount,
-			transaction_hash, notes, issued_at, due_at, submitted_at, completed_at,
-			retry_count, last_error, metadata, created_at, updated_at
-		FROM invoices WHERE transaction_uuid = $1`
+	query := `SELECT ` + invoiceColumns + ` FROM invoices WHERE transaction_uuid = $1`
 
-	var inv domain.Invoice
-	err := r.pool.QueryRow(ctx, query, transactionUuid).Scan(
-		&inv.ID, &inv.ExternalID, &inv.TransactionUuid, &inv.Status,
-		&inv.CustomerName, &inv.CustomerTaxID, &inv.CustomerAddress,
-		&inv.Currency, &inv.OriginalCurrency, &inv.ExchangeRate,
-		&inv.TotalAmount, &inv.TaxAmount, &inv.NetAmount,
-		&inv.OriginalTotalAmount, &inv.OriginalTaxAmount, &inv.OriginalNetAmount,
-		&inv.TransactionHash, &inv.Notes, &inv.IssuedAt, &inv.DueAt, &inv.SubmittedAt, &inv.CompletedAt,
-		&inv.RetryCount, &inv.LastError, &inv.Metadata, &inv.CreatedAt, &inv.UpdatedAt,
-	)
+	row := r.pool.QueryRow(ctx, query, transactionUuid)
+	inv, err := scanInvoice(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.NewNotFoundError("invoice not found for transaction_uuid: " + transactionUuid)
 		}
 		return nil, domain.NewInternalError("failed to get invoice by transaction_uuid", err)
 	}
-	return &inv, nil
+	return inv, nil
 }
 
 func (r *InvoiceRepo) GetPendingPolling(ctx context.Context, limit int) ([]*domain.Invoice, error) {
-	query := `
-		SELECT id, external_id, transaction_uuid, status, customer_name, customer_tax_id,
-			customer_address, currency, original_currency, exchange_rate,
-			total_amount, tax_amount, net_amount,
-			original_total_amount, original_tax_amount, original_net_amount,
-			transaction_hash, notes, issued_at, due_at, submitted_at, completed_at,
-			retry_count, last_error, metadata, created_at, updated_at
+	query := `SELECT ` + invoiceColumns + `
 		FROM invoices
 		WHERE status IN ('submitted', 'processing')
 		ORDER BY updated_at ASC
@@ -296,36 +338,39 @@ func (r *InvoiceRepo) GetPendingPolling(ctx context.Context, limit int) ([]*doma
 
 	var invoices []*domain.Invoice
 	for rows.Next() {
-		var inv domain.Invoice
-		if err := rows.Scan(
-			&inv.ID, &inv.ExternalID, &inv.TransactionUuid, &inv.Status,
-			&inv.CustomerName, &inv.CustomerTaxID, &inv.CustomerAddress,
-			&inv.Currency, &inv.OriginalCurrency, &inv.ExchangeRate,
-			&inv.TotalAmount, &inv.TaxAmount, &inv.NetAmount,
-			&inv.OriginalTotalAmount, &inv.OriginalTaxAmount, &inv.OriginalNetAmount,
-			&inv.TransactionHash, &inv.Notes, &inv.IssuedAt, &inv.DueAt, &inv.SubmittedAt, &inv.CompletedAt,
-			&inv.RetryCount, &inv.LastError, &inv.Metadata, &inv.CreatedAt, &inv.UpdatedAt,
-		); err != nil {
+		inv, err := scanInvoice(rows)
+		if err != nil {
 			return nil, domain.NewInternalError("failed to scan invoice", err)
 		}
-		invoices = append(invoices, &inv)
+		invoices = append(invoices, inv)
 	}
 	return invoices, nil
 }
 
 // --- Items ---
 
+// itemColumns is the shared column list for SELECT queries on the invoice_items table.
+const itemColumns = `id, invoice_id, item_name, quantity, unit_price,
+	tax_percentage, tax_amount, item_total_amount_without_tax,
+	item_total_amount_with_tax, item_total_amount_after_discount, item_discount,
+	token_unit_price, token_tax_amount, token_line_total,
+	line_number, created_at,
+	selection, item_type, item_code, unit_code, unit_name,
+	discount, discount2, item_note, is_increase_item,
+	batch_no, exp_date, adjust_ratio, unit_price_with_tax, special_info`
+
 func (r *InvoiceRepo) AddItem(ctx context.Context, item *domain.InvoiceItem) error {
 	query := `
-		INSERT INTO invoice_items (id, invoice_id, description, quantity, unit_price,
-			tax_rate, tax_amount, line_total,
-			original_unit_price, original_tax_amount, original_line_total,
-			sort_order, created_at,
+		INSERT INTO invoice_items (id, invoice_id, item_name, quantity, unit_price,
+			tax_percentage, tax_amount, item_total_amount_without_tax,
+			item_total_amount_with_tax, item_total_amount_after_discount, item_discount,
+			token_unit_price, token_tax_amount, token_line_total,
+			line_number, created_at,
 			selection, item_type, item_code, unit_code, unit_name,
 			discount, discount2, item_note, is_increase_item,
 			batch_no, exp_date, adjust_ratio, unit_price_with_tax, special_info)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,
-			$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)`
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
+			$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30)`
 
 	specialInfoJSON, err := json.Marshal(item.SpecialInfo)
 	if err != nil {
@@ -333,10 +378,11 @@ func (r *InvoiceRepo) AddItem(ctx context.Context, item *domain.InvoiceItem) err
 	}
 
 	_, err = r.pool.Exec(ctx, query,
-		item.ID, item.InvoiceID, item.Description, item.Quantity, item.UnitPrice,
-		item.TaxRate, item.TaxAmount, item.LineTotal,
-		item.OriginalUnitPrice, item.OriginalTaxAmount, item.OriginalLineTotal,
-		item.SortOrder, item.CreatedAt,
+		item.ID, item.InvoiceID, item.ItemName, item.Quantity, item.UnitPrice,
+		item.TaxPercentage, item.TaxAmount, item.ItemTotalAmountWithoutTax,
+		item.ItemTotalAmountWithTax, item.ItemTotalAmountAfterDiscount, item.ItemDiscount,
+		item.TokenUnitPrice, item.TokenTaxAmount, item.TokenLineTotal,
+		item.LineNumber, item.CreatedAt,
 		item.Selection, item.ItemType, item.ItemCode, item.UnitCode, item.UnitName,
 		item.Discount, item.Discount2, item.ItemNote, item.IsIncreaseItem,
 		item.BatchNo, item.ExpDate, item.AdjustRatio, item.UnitPriceWithTax, specialInfoJSON,
@@ -350,13 +396,19 @@ func (r *InvoiceRepo) AddItem(ctx context.Context, item *domain.InvoiceItem) err
 func (r *InvoiceRepo) UpdateItem(ctx context.Context, item *domain.InvoiceItem) error {
 	query := `
 		UPDATE invoice_items SET
-			unit_price=$1, tax_amount=$2, line_total=$3,
-			original_unit_price=$4, original_tax_amount=$5, original_line_total=$6
-		WHERE id = $7`
+			item_name=$1, quantity=$2, unit_price=$3,
+			tax_percentage=$4, tax_amount=$5,
+			item_total_amount_without_tax=$6, item_total_amount_with_tax=$7,
+			item_total_amount_after_discount=$8, item_discount=$9,
+			token_unit_price=$10, token_tax_amount=$11, token_line_total=$12
+		WHERE id = $13`
 
 	tag, err := r.pool.Exec(ctx, query,
-		item.UnitPrice, item.TaxAmount, item.LineTotal,
-		item.OriginalUnitPrice, item.OriginalTaxAmount, item.OriginalLineTotal,
+		item.ItemName, item.Quantity, item.UnitPrice,
+		item.TaxPercentage, item.TaxAmount,
+		item.ItemTotalAmountWithoutTax, item.ItemTotalAmountWithTax,
+		item.ItemTotalAmountAfterDiscount, item.ItemDiscount,
+		item.TokenUnitPrice, item.TokenTaxAmount, item.TokenLineTotal,
 		item.ID,
 	)
 	if err != nil {
@@ -369,16 +421,8 @@ func (r *InvoiceRepo) UpdateItem(ctx context.Context, item *domain.InvoiceItem) 
 }
 
 func (r *InvoiceRepo) GetItemsByInvoiceID(ctx context.Context, invoiceID uuid.UUID) ([]*domain.InvoiceItem, error) {
-	query := `
-		SELECT id, invoice_id, description, quantity, unit_price,
-			tax_rate, tax_amount, line_total,
-			original_unit_price, original_tax_amount, original_line_total,
-			sort_order, created_at,
-			selection, item_type, item_code, unit_code, unit_name,
-			discount, discount2, item_note, is_increase_item,
-			batch_no, exp_date, adjust_ratio, unit_price_with_tax, special_info
-		FROM invoice_items WHERE invoice_id = $1
-		ORDER BY sort_order, created_at`
+	query := `SELECT ` + itemColumns + ` FROM invoice_items WHERE invoice_id = $1
+		ORDER BY line_number, created_at`
 
 	rows, err := r.pool.Query(ctx, query, invoiceID)
 	if err != nil {
@@ -391,10 +435,11 @@ func (r *InvoiceRepo) GetItemsByInvoiceID(ctx context.Context, invoiceID uuid.UU
 		var item domain.InvoiceItem
 		var specialInfoJSON []byte
 		if err := rows.Scan(
-			&item.ID, &item.InvoiceID, &item.Description, &item.Quantity, &item.UnitPrice,
-			&item.TaxRate, &item.TaxAmount, &item.LineTotal,
-			&item.OriginalUnitPrice, &item.OriginalTaxAmount, &item.OriginalLineTotal,
-			&item.SortOrder, &item.CreatedAt,
+			&item.ID, &item.InvoiceID, &item.ItemName, &item.Quantity, &item.UnitPrice,
+			&item.TaxPercentage, &item.TaxAmount, &item.ItemTotalAmountWithoutTax,
+			&item.ItemTotalAmountWithTax, &item.ItemTotalAmountAfterDiscount, &item.ItemDiscount,
+			&item.TokenUnitPrice, &item.TokenTaxAmount, &item.TokenLineTotal,
+			&item.LineNumber, &item.CreatedAt,
 			&item.Selection, &item.ItemType, &item.ItemCode, &item.UnitCode, &item.UnitName,
 			&item.Discount, &item.Discount2, &item.ItemNote, &item.IsIncreaseItem,
 			&item.BatchNo, &item.ExpDate, &item.AdjustRatio, &item.UnitPriceWithTax, &specialInfoJSON,

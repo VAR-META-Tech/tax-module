@@ -24,6 +24,7 @@ func NewInvoiceHandler(svc *service.InvoiceService, log *zerolog.Logger) *Invoic
 }
 
 // CreateInvoice godoc POST /api/v1/invoices
+// Creates an invoice with items in draft status.
 func (h *InvoiceHandler) CreateInvoice(c *gin.Context) {
 	var req dto.CreateInvoiceRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -31,47 +32,108 @@ func (h *InvoiceHandler) CreateInvoice(c *gin.Context) {
 		return
 	}
 
-	if req.OriginalCurrency != "VND" && req.OriginalCurrency != "HBAR" {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse("VALIDATION_ERROR", "original_currency must be VND or HBAR"))
+	if req.TokenCurrency != "VND" && req.TokenCurrency != "HBAR" {
+		c.JSON(http.StatusBadRequest, dto.ErrorResponse("VALIDATION_ERROR", "token_currency must be VND or HBAR"))
 		return
 	}
 
 	exchangeRate := 1.0
-	if req.OriginalCurrency == "HBAR" {
+	if req.TokenCurrency == "HBAR" {
 		if req.ExchangeRate == nil || *req.ExchangeRate <= 0 {
-			c.JSON(http.StatusBadRequest, dto.ErrorResponse("VALIDATION_ERROR", "exchange_rate is required and must be > 0 when original_currency is HBAR"))
+			c.JSON(http.StatusBadRequest, dto.ErrorResponse("VALIDATION_ERROR", "exchange_rate is required and must be > 0 when token_currency is HBAR"))
 			return
 		}
 		exchangeRate = *req.ExchangeRate
 	}
 
 	invoice := &domain.Invoice{
-		CustomerName:     req.CustomerName,
-		CustomerTaxID:    req.CustomerTaxID,
-		CustomerAddress:  req.CustomerAddress,
-		Currency:         "VND",
-		OriginalCurrency: req.OriginalCurrency,
-		ExchangeRate:     exchangeRate,
-		TransactionHash:  req.TransactionHash,
-		Notes:            req.Notes,
+		BuyerName:             req.BuyerName,
+		BuyerLegalName:        req.BuyerLegalName,
+		BuyerTaxCode:          req.BuyerTaxCode,
+		BuyerAddress:          req.BuyerAddress,
+		BuyerEmail:            req.BuyerEmail,
+		BuyerPhone:            req.BuyerPhone,
+		BuyerCode:             req.BuyerCode,
+		Currency:              "VND",
+		TotalAmountWithTax:    req.TotalAmountWithTax,
+		TotalTaxAmount:        req.TotalTaxAmount,
+		TotalAmountWithoutTax: req.TotalAmountWithoutTax,
+		TokenCurrency:         req.TokenCurrency,
+		ExchangeRate:          exchangeRate,
+		ExchangeRateSource:    req.ExchangeRateSource,
+		HbarAmount:            req.HbarAmount,
+		TokenTotalAmount:      req.TokenTotalAmount,
+		TokenTaxAmount:        req.TokenTaxAmount,
+		TokenNetAmount:        req.TokenNetAmount,
+		PaymentMethod:         req.PaymentMethod,
+		TransactionHash:       req.TransactionHash,
+		ErpOrderID:            req.ErpOrderID,
+		Notes:                 req.Notes,
 	}
 	if req.IssuedAt != nil {
 		if t, err := time.Parse(time.RFC3339, *req.IssuedAt); err == nil {
 			invoice.IssuedAt = &t
 		}
 	}
-	if req.DueAt != nil {
-		if t, err := time.Parse(time.RFC3339, *req.DueAt); err == nil {
-			invoice.DueAt = &t
+
+	// Map items
+	items := make([]*domain.InvoiceItem, len(req.Items))
+	for i, ri := range req.Items {
+		items[i] = &domain.InvoiceItem{
+			ItemName:                     ri.ItemName,
+			Quantity:                     ri.Quantity,
+			UnitPrice:                    ri.UnitPrice,
+			TaxPercentage:               ri.TaxPercentage,
+			TaxAmount:                   ri.TaxAmount,
+			ItemTotalAmountWithoutTax:    ri.ItemTotalAmountWithoutTax,
+			ItemTotalAmountWithTax:       ri.ItemTotalAmountWithTax,
+			ItemTotalAmountAfterDiscount: ri.ItemTotalAmountAfterDiscount,
+			ItemDiscount:                 ri.ItemDiscount,
+			TokenUnitPrice:               ri.TokenUnitPrice,
+			TokenTaxAmount:               ri.TokenTaxAmount,
+			TokenLineTotal:               ri.TokenLineTotal,
+			LineNumber:                   ri.LineNumber,
+			Selection:                    ri.Selection,
+			ItemType:                     ri.ItemType,
+			ItemCode:                     ri.ItemCode,
+			UnitCode:                     ri.UnitCode,
+			UnitName:                     ri.UnitName,
+			Discount:                     ri.Discount,
+			Discount2:                    ri.Discount2,
+			ItemNote:                     ri.ItemNote,
+			IsIncreaseItem:               ri.IsIncreaseItem,
+			BatchNo:                      ri.BatchNo,
+			ExpDate:                      ri.ExpDate,
+			AdjustRatio:                  ri.AdjustRatio,
+			UnitPriceWithTax:             ri.UnitPriceWithTax,
+			SpecialInfo:                  toSpecialInfo(ri.SpecialInfo),
 		}
 	}
+	invoice.Items = items
 
-	if err := h.svc.CreateDraft(c.Request.Context(), invoice); err != nil {
+	if err := h.svc.CreateInvoice(c.Request.Context(), invoice); err != nil {
 		handleError(c, err)
 		return
 	}
 
 	c.JSON(http.StatusCreated, dto.SuccessResponse(invoice))
+}
+
+// SubmitInvoice godoc POST /api/v1/invoices/:id/submit
+// Transitions a draft invoice to submitted and enqueues for Viettel publishing.
+func (h *InvoiceHandler) SubmitInvoice(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, dto.ErrorResponse("VALIDATION_ERROR", "invalid invoice id"))
+		return
+	}
+
+	if err := h.svc.SubmitInvoice(c.Request.Context(), id); err != nil {
+		handleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, dto.SuccessResponse(gin.H{"status": "submitted"}))
 }
 
 // ListInvoices godoc GET /api/v1/invoices
@@ -127,63 +189,6 @@ func (h *InvoiceHandler) GetInvoice(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.SuccessResponse(invoice))
 }
 
-// UpdateInvoice godoc PUT /api/v1/invoices/:id
-func (h *InvoiceHandler) UpdateInvoice(c *gin.Context) {
-	id, err := uuid.Parse(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse("VALIDATION_ERROR", "invalid invoice id"))
-		return
-	}
-
-	var req dto.UpdateInvoiceRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse("VALIDATION_ERROR", err.Error()))
-		return
-	}
-
-	if req.OriginalCurrency != "VND" && req.OriginalCurrency != "HBAR" {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse("VALIDATION_ERROR", "original_currency must be VND or HBAR"))
-		return
-	}
-
-	exchangeRate := 1.0
-	if req.OriginalCurrency == "HBAR" {
-		if req.ExchangeRate == nil || *req.ExchangeRate <= 0 {
-			c.JSON(http.StatusBadRequest, dto.ErrorResponse("VALIDATION_ERROR", "exchange_rate is required and must be > 0 when original_currency is HBAR"))
-			return
-		}
-		exchangeRate = *req.ExchangeRate
-	}
-
-	invoice := &domain.Invoice{
-		CustomerName:     req.CustomerName,
-		CustomerTaxID:    req.CustomerTaxID,
-		CustomerAddress:  req.CustomerAddress,
-		Currency:         "VND",
-		OriginalCurrency: req.OriginalCurrency,
-		ExchangeRate:     exchangeRate,
-		TransactionHash:  req.TransactionHash,
-		Notes:            req.Notes,
-	}
-	if req.IssuedAt != nil {
-		if t, err := time.Parse(time.RFC3339, *req.IssuedAt); err == nil {
-			invoice.IssuedAt = &t
-		}
-	}
-	if req.DueAt != nil {
-		if t, err := time.Parse(time.RFC3339, *req.DueAt); err == nil {
-			invoice.DueAt = &t
-		}
-	}
-
-	if err := h.svc.UpdateInvoice(c.Request.Context(), id, invoice); err != nil {
-		handleError(c, err)
-		return
-	}
-
-	c.JSON(http.StatusOK, dto.SuccessResponse(invoice))
-}
-
 // CancelInvoice godoc DELETE /api/v1/invoices/:id
 func (h *InvoiceHandler) CancelInvoice(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
@@ -203,87 +208,6 @@ func (h *InvoiceHandler) CancelInvoice(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.SuccessResponse(gin.H{"status": "cancelled"}))
 }
 
-// AddItem godoc POST /api/v1/invoices/:id/items
-func (h *InvoiceHandler) AddItem(c *gin.Context) {
-	invoiceID, err := uuid.Parse(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse("VALIDATION_ERROR", "invalid invoice id"))
-		return
-	}
-
-	var req dto.AddItemRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse("VALIDATION_ERROR", err.Error()))
-		return
-	}
-
-	item := &domain.InvoiceItem{
-		Description:      req.Description,
-		Quantity:         req.Quantity,
-		UnitPrice:        req.UnitPrice,
-		TaxRate:          req.TaxRate,
-		SortOrder:        req.SortOrder,
-		Selection:        req.Selection,
-		ItemType:         req.ItemType,
-		ItemCode:         req.ItemCode,
-		UnitCode:         req.UnitCode,
-		UnitName:         req.UnitName,
-		Discount:         req.Discount,
-		Discount2:        req.Discount2,
-		ItemNote:         req.ItemNote,
-		IsIncreaseItem:   req.IsIncreaseItem,
-		BatchNo:          req.BatchNo,
-		ExpDate:          req.ExpDate,
-		AdjustRatio:      req.AdjustRatio,
-		UnitPriceWithTax: req.UnitPriceWithTax,
-		SpecialInfo:      toSpecialInfo(req.SpecialInfo),
-	}
-
-	if err := h.svc.AddItem(c.Request.Context(), invoiceID, item); err != nil {
-		handleError(c, err)
-		return
-	}
-
-	c.JSON(http.StatusCreated, dto.SuccessResponse(item))
-}
-
-// RemoveItem godoc DELETE /api/v1/invoices/:id/items/:itemId
-func (h *InvoiceHandler) RemoveItem(c *gin.Context) {
-	invoiceID, err := uuid.Parse(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse("VALIDATION_ERROR", "invalid invoice id"))
-		return
-	}
-	itemID, err := uuid.Parse(c.Param("itemId"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse("VALIDATION_ERROR", "invalid item id"))
-		return
-	}
-
-	if err := h.svc.RemoveItem(c.Request.Context(), invoiceID, itemID); err != nil {
-		handleError(c, err)
-		return
-	}
-
-	c.JSON(http.StatusOK, dto.SuccessResponse(gin.H{"status": "removed"}))
-}
-
-// SubmitInvoice godoc POST /api/v1/invoices/:id/submit
-func (h *InvoiceHandler) SubmitInvoice(c *gin.Context) {
-	id, err := uuid.Parse(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse("VALIDATION_ERROR", "invalid invoice id"))
-		return
-	}
-
-	if err := h.svc.SubmitInvoice(c.Request.Context(), id); err != nil {
-		handleError(c, err)
-		return
-	}
-
-	c.JSON(http.StatusOK, dto.SuccessResponse(gin.H{"status": "submitted"}))
-}
-
 // SendInvoiceToTax godoc POST /api/v1/invoices/send-to-tax
 func (h *InvoiceHandler) SendInvoiceToTax(c *gin.Context) {
 	var req struct {
@@ -299,8 +223,6 @@ func (h *InvoiceHandler) SendInvoiceToTax(c *gin.Context) {
 
 	successCount, errorCount, err := h.svc.SendInvoiceToTax(c.Request.Context(), req.TransactionUuid, req.StartDate, req.EndDate)
 	if err != nil {
-		// If errorCount > 0, it's a partial failure from Viettel — some invoices
-		// succeeded and some failed. Return the counts so the client knows what happened.
 		if errorCount > 0 {
 			c.JSON(http.StatusOK, dto.SuccessResponse(gin.H{
 				"success_count": successCount,
@@ -308,7 +230,6 @@ func (h *InvoiceHandler) SendInvoiceToTax(c *gin.Context) {
 			}))
 			return
 		}
-		// Otherwise it's a total failure (e.g. network error, auth error, validation error).
 		handleError(c, err)
 		return
 	}
@@ -356,7 +277,6 @@ func (h *InvoiceHandler) GetHistory(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.SuccessResponse(history))
 }
 
-// handleError maps domain.AppError to HTTP response.
 func toSpecialInfo(items []dto.SpecialInfoItem) []domain.SpecialInfoItem {
 	if len(items) == 0 {
 		return nil
