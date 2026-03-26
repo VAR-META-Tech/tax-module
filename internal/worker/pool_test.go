@@ -38,7 +38,7 @@ func (m *mockPublisher) QueryStatus(_ context.Context, _ string) (string, []byte
 	return m.queryStatus, nil, nil
 }
 
-func (m *mockPublisher) SendToTax(_ context.Context, _, _, _ string) (int, int, error) {
+func (m *mockPublisher) ReportToAuthority(_ context.Context, _, _, _ string) (int, int, error) {
 	return 0, 0, nil
 }
 

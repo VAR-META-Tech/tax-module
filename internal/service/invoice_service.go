@@ -147,9 +147,9 @@ func (s *InvoiceService) GetStatusHistory(ctx context.Context, invoiceID uuid.UU
 	return s.repo.GetStatusHistory(ctx, invoiceID)
 }
 
-// SendInvoiceToTax sends a completed invoice to the tax authority (CQT).
-func (s *InvoiceService) SendInvoiceToTax(ctx context.Context, transactionUuid, startDate, endDate string) (int, int, error) {
-	successCount, errorCount, err := s.publisher.SendToTax(ctx, transactionUuid, startDate, endDate)
+// ReportToAuthority sends a completed invoice to the tax authority (CQT).
+func (s *InvoiceService) ReportToAuthority(ctx context.Context, transactionUuid, startDate, endDate string) (int, int, error) {
+	successCount, errorCount, err := s.publisher.ReportToAuthority(ctx, transactionUuid, startDate, endDate)
 	if err != nil {
 		s.log.Error().Err(err).
 			Str("transaction_uuid", transactionUuid).

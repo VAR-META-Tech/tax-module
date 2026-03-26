@@ -205,9 +205,9 @@ func (c *ViettelClient) doAuthenticatedRequest(ctx context.Context, method, url,
 	return rawBody, nil
 }
 
-// SendToTaxByTransactionUuid sends an invoice to the tax authority (CQT) via Viettel (§7.36).
-func (c *ViettelClient) SendToTaxByTransactionUuid(ctx context.Context, req *SendToTaxRequest) (*SendToTaxResponse, error) {
-	url := fmt.Sprintf("%s%s", c.cfg.BaseURL, c.cfg.SendToTaxPath)
+// ReportToAuthorityByTransactionUuid sends an invoice to the tax authority (CQT) via Viettel (§7.36).
+func (c *ViettelClient) ReportToAuthorityByTransactionUuid(ctx context.Context, req *ReportToAuthorityRequest) (*ReportToAuthorityResponse, error) {
+	url := fmt.Sprintf("%s%s", c.cfg.BaseURL, c.cfg.ReportToAuthorityPath)
 
 	formData := neturl.Values{}
 	formData.Set("supplierTaxCode", req.SupplierTaxCode)
@@ -220,7 +220,7 @@ func (c *ViettelClient) SendToTaxByTransactionUuid(ctx context.Context, req *Sen
 		return nil, err
 	}
 
-	var resp SendToTaxResponse
+	var resp ReportToAuthorityResponse
 	if err := json.Unmarshal(rawBody, &resp); err != nil {
 		return nil, domain.NewThirdPartyError("decode send to tax response", err)
 	}

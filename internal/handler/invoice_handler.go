@@ -208,8 +208,8 @@ func (h *InvoiceHandler) CancelInvoice(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.SuccessResponse(gin.H{"status": "cancelled"}))
 }
 
-// SendInvoiceToTax godoc POST /api/v1/invoices/send-to-tax
-func (h *InvoiceHandler) SendInvoiceToTax(c *gin.Context) {
+// ReportToAuthority godoc POST /api/v1/invoices/send-to-tax
+func (h *InvoiceHandler) ReportToAuthority(c *gin.Context) {
 	var req struct {
 		TransactionUuid string `json:"transaction_uuid" binding:"required"`
 		StartDate       string `json:"start_date" binding:"required"`
@@ -221,7 +221,7 @@ func (h *InvoiceHandler) SendInvoiceToTax(c *gin.Context) {
 		return
 	}
 
-	successCount, errorCount, err := h.svc.SendInvoiceToTax(c.Request.Context(), req.TransactionUuid, req.StartDate, req.EndDate)
+	successCount, errorCount, err := h.svc.ReportToAuthority(c.Request.Context(), req.TransactionUuid, req.StartDate, req.EndDate)
 	if err != nil {
 		if errorCount > 0 {
 			c.JSON(http.StatusOK, dto.SuccessResponse(gin.H{
