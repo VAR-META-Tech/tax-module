@@ -29,6 +29,10 @@ func (p *ViettelPublisher) CreateInvoice(ctx context.Context, invoice *domain.In
 	viettelReq := MapInvoiceToViettel(invoice, p.cfg, p.sellerCfg)
 	transactionUuid := viettelReq.GeneralInvoiceInfo.TransactionUuid
 
+	if err := ValidateViettelRequest(viettelReq); err != nil {
+		return "", domain.NewValidationError(err.Error())
+	}
+
 	invoice.TransactionUuid = &transactionUuid
 
 	p.log.Info().
