@@ -80,6 +80,9 @@ func (r *mockInvoiceRepo) GetStatusHistory(_ context.Context, _ uuid.UUID) ([]*d
 	return nil, nil
 }
 func (r *mockInvoiceRepo) AddAuditLog(_ context.Context, _ *domain.AuditLog) error { return nil }
+func (r *mockInvoiceRepo) UpdateTransactionHash(_ context.Context, _ uuid.UUID, _ string) error {
+	return nil
+}
 
 // --- Tests ---
 

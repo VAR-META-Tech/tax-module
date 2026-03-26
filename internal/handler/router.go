@@ -37,6 +37,7 @@ func NewRouter(log *zerolog.Logger, dbPool *pgxpool.Pool, invoiceSvc *service.In
 			invoices.GET("/:id", inv.GetInvoice)
 			invoices.DELETE("/:id", inv.CancelInvoice)
 
+			invoices.PATCH("/:id/payment", inv.UpdatePayment)
 			invoices.POST("/:id/submit", inv.SubmitInvoice)
 			invoices.POST("/report-to-authority", inv.ReportToAuthority)
 

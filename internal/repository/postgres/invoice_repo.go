@@ -205,6 +205,18 @@ func (r *InvoiceRepo) Update(ctx context.Context, invoice *domain.Invoice) error
 	return nil
 }
 
+func (r *InvoiceRepo) UpdateTransactionHash(ctx context.Context, id uuid.UUID, transactionHash string) error {
+	query := `UPDATE invoices SET transaction_hash = $1, updated_at = $2 WHERE id = $3`
+	tag, err := r.pool.Exec(ctx, query, transactionHash, time.Now(), id)
+	if err != nil {
+		return domain.NewInternalError("failed to update transaction hash", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.NewNotFoundError("invoice not found")
+	}
+	return nil
+}
+
 func (r *InvoiceRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status domain.InvoiceStatus, reason string) error {
 	query := `UPDATE invoices SET status=$1, last_error=$2, updated_at=$3`
 

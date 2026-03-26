@@ -54,6 +54,26 @@ func (s *InvoiceService) CreateInvoice(ctx context.Context, invoice *domain.Invo
 	return nil
 }
 
+// UpdateTransactionHash saves the blockchain transaction hash for a draft invoice
+// after payment has been completed on the frontend.
+func (s *InvoiceService) UpdateTransactionHash(ctx context.Context, id uuid.UUID, transactionHash string) error {
+	existing, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	if existing.Status != domain.StatusDraft {
+		return domain.NewValidationError("transaction hash can only be updated on draft invoices")
+	}
+
+	if err := s.repo.UpdateTransactionHash(ctx, id, transactionHash); err != nil {
+		return err
+	}
+
+	s.log.Info().Str("invoice_id", id.String()).Str("transaction_hash", transactionHash).Msg("Transaction hash updated")
+	return nil
+}
+
 // SubmitInvoice transitions a draft invoice to submitted and enqueues it
 // for async publishing to Viettel SInvoice.
 func (s *InvoiceService) SubmitInvoice(ctx context.Context, id uuid.UUID) error {

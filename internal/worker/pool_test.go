@@ -153,6 +153,9 @@ func (r *mockRepo) GetStatusHistory(_ context.Context, _ uuid.UUID) ([]*domain.I
 	return nil, nil
 }
 func (r *mockRepo) AddAuditLog(_ context.Context, _ *domain.AuditLog) error { return nil }
+func (r *mockRepo) UpdateTransactionHash(_ context.Context, _ uuid.UUID, _ string) error {
+	return nil
+}
 
 func (r *mockRepo) getStatus(id uuid.UUID) domain.InvoiceStatus {
 	r.mu.Lock()

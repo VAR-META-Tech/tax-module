@@ -119,6 +119,29 @@ func (h *InvoiceHandler) CreateInvoice(c *gin.Context) {
 	c.JSON(http.StatusCreated, dto.SuccessResponse(invoice))
 }
 
+// UpdatePayment godoc PATCH /api/v1/invoices/:id/payment
+// Saves the blockchain transaction hash after payment is completed.
+func (h *InvoiceHandler) UpdatePayment(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, dto.ErrorResponse("VALIDATION_ERROR", "invalid invoice id"))
+		return
+	}
+
+	var req dto.UpdatePaymentRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, dto.ErrorResponse("VALIDATION_ERROR", err.Error()))
+		return
+	}
+
+	if err := h.svc.UpdateTransactionHash(c.Request.Context(), id, req.TransactionHash); err != nil {
+		handleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, dto.SuccessResponse(gin.H{"transaction_hash": req.TransactionHash}))
+}
+
 // SubmitInvoice godoc POST /api/v1/invoices/:id/submit
 // Transitions a draft invoice to submitted and enqueues for Viettel publishing.
 func (h *InvoiceHandler) SubmitInvoice(c *gin.Context) {

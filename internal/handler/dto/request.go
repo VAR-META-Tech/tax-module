@@ -74,6 +74,10 @@ type ItemRequest struct {
 	SpecialInfo      []SpecialInfoItem `json:"special_info,omitempty"`
 }
 
+type UpdatePaymentRequest struct {
+	TransactionHash string `json:"transaction_hash" binding:"required,max=255"`
+}
+
 type CancelInvoiceRequest struct {
 	Reason string `json:"reason"`
 }
