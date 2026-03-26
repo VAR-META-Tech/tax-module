@@ -21,7 +21,6 @@ func MapInvoiceToViettel(invoice *domain.Invoice, cfg config.ThirdPartyConfig, s
 	}
 
 	now := time.Now().UnixMilli()
-	exchangeRate := 1
 	selection := 1 // goods/service
 
 	req := &ViettelInvoiceRequest{
@@ -31,7 +30,7 @@ func MapInvoiceToViettel(invoice *domain.Invoice, cfg config.ThirdPartyConfig, s
 			InvoiceSeries:     cfg.InvoiceSeries,
 			TransactionUuid:   transactionUuid,
 			CurrencyCode:      invoice.Currency,
-			ExchangeRate:      &exchangeRate,
+			ExchangeRate:      float64Ptr(1),
 			AdjustmentType:    "1", // original invoice
 			PaymentStatus:     true,
 			InvoiceIssuedDate: &now,
@@ -67,18 +66,47 @@ func mapItems(items []*domain.InvoiceItem) []ItemInfo {
 	for i, item := range items {
 		lineNum := i + 1
 		selection := 1
+		if item.Selection != nil {
+			selection = *item.Selection
+		}
 		itemTotal := item.UnitPrice * item.Quantity
-		result = append(result, ItemInfo{
+
+		info := ItemInfo{
 			LineNumber:                &lineNum,
 			Selection:                 &selection,
+			ItemType:                  item.ItemType,
+			ItemCode:                  item.ItemCode,
 			ItemName:                  item.Description,
+			UnitCode:                  item.UnitCode,
+			UnitName:                  item.UnitName,
 			Quantity:                  float64Ptr(item.Quantity),
 			UnitPrice:                 float64Ptr(item.UnitPrice),
+			UnitPriceWithTax:          item.UnitPriceWithTax,
 			ItemTotalAmountWithoutTax: float64Ptr(itemTotal),
 			TaxPercentage:             float64Ptr(item.TaxRate),
 			TaxAmount:                 float64Ptr(item.TaxAmount),
 			ItemTotalAmountWithTax:    float64Ptr(item.LineTotal),
-		})
+			ItemNote:                  item.ItemNote,
+			IsIncreaseItem:            item.IsIncreaseItem,
+			BatchNo:                   item.BatchNo,
+			ExpDate:                   item.ExpDate,
+			AdjustRatio:               item.AdjustRatio,
+		}
+		if item.Discount != 0 {
+			info.Discount = float64Ptr(item.Discount)
+		}
+		if item.Discount2 != 0 {
+			info.Discount2 = float64Ptr(item.Discount2)
+		}
+		if len(item.SpecialInfo) > 0 {
+			si := make([]SpecialInfoItem, len(item.SpecialInfo))
+			for j, s := range item.SpecialInfo {
+				si[j] = SpecialInfoItem{Name: s.Name, Value: s.Value}
+			}
+			info.SpecialInfo = si
+		}
+
+		result = append(result, info)
 	}
 	return result
 }

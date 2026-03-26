@@ -87,7 +87,29 @@ type InvoiceItem struct {
 	OriginalTaxAmount float64   `json:"original_tax_amount"`
 	OriginalLineTotal float64   `json:"original_line_total"`
 	SortOrder         int       `json:"sort_order"`
-	CreatedAt   time.Time `json:"created_at"`
+	CreatedAt         time.Time `json:"created_at"`
+
+	// Viettel ItemInfo fields
+	Selection       *int     `json:"selection,omitempty"`         // 1=goods,2=note,3=discount,4=table/fee,5=promo,6=special
+	ItemType        *int     `json:"item_type,omitempty"`         // required when selection=6 (ND70)
+	ItemCode        string   `json:"item_code,omitempty"`
+	UnitCode        string   `json:"unit_code,omitempty"`
+	UnitName        string   `json:"unit_name,omitempty"`
+	Discount        float64  `json:"discount"`                    // % discount on unit price
+	Discount2       float64  `json:"discount2"`                   // second % discount
+	ItemNote        string   `json:"item_note,omitempty"`
+	IsIncreaseItem  *bool    `json:"is_increase_item,omitempty"`  // nil=normal, false=decrease, true=increase
+	BatchNo         string   `json:"batch_no,omitempty"`
+	ExpDate         string   `json:"exp_date,omitempty"`
+	AdjustRatio     string   `json:"adjust_ratio,omitempty"`
+	UnitPriceWithTax *float64          `json:"unit_price_with_tax,omitempty"`
+	SpecialInfo      []SpecialInfoItem `json:"special_info,omitempty"` // ND70 special goods attributes
+}
+
+// SpecialInfoItem represents a special goods attribute per ND70.
+type SpecialInfoItem struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
 }
 
 // InvoiceStatusHistory tracks status transitions.

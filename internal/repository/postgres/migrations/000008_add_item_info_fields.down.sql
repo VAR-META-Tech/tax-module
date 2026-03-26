@@ -1,0 +1,14 @@
+ALTER TABLE invoice_items DROP COLUMN IF EXISTS selection;
+ALTER TABLE invoice_items DROP COLUMN IF EXISTS item_type;
+ALTER TABLE invoice_items DROP COLUMN IF EXISTS item_code;
+ALTER TABLE invoice_items DROP COLUMN IF EXISTS unit_code;
+ALTER TABLE invoice_items DROP COLUMN IF EXISTS unit_name;
+ALTER TABLE invoice_items DROP COLUMN IF EXISTS discount;
+ALTER TABLE invoice_items DROP COLUMN IF EXISTS discount2;
+ALTER TABLE invoice_items DROP COLUMN IF EXISTS item_note;
+ALTER TABLE invoice_items DROP COLUMN IF EXISTS is_increase_item;
+ALTER TABLE invoice_items DROP COLUMN IF EXISTS batch_no;
+ALTER TABLE invoice_items DROP COLUMN IF EXISTS exp_date;
+ALTER TABLE invoice_items DROP COLUMN IF EXISTS adjust_ratio;
+ALTER TABLE invoice_items DROP COLUMN IF EXISTS unit_price_with_tax;
+ALTER TABLE invoice_items DROP COLUMN IF EXISTS special_info;

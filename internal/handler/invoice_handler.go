@@ -218,11 +218,25 @@ func (h *InvoiceHandler) AddItem(c *gin.Context) {
 	}
 
 	item := &domain.InvoiceItem{
-		Description: req.Description,
-		Quantity:    req.Quantity,
-		UnitPrice:   req.UnitPrice,
-		TaxRate:     req.TaxRate,
-		SortOrder:   req.SortOrder,
+		Description:      req.Description,
+		Quantity:         req.Quantity,
+		UnitPrice:        req.UnitPrice,
+		TaxRate:          req.TaxRate,
+		SortOrder:        req.SortOrder,
+		Selection:        req.Selection,
+		ItemType:         req.ItemType,
+		ItemCode:         req.ItemCode,
+		UnitCode:         req.UnitCode,
+		UnitName:         req.UnitName,
+		Discount:         req.Discount,
+		Discount2:        req.Discount2,
+		ItemNote:         req.ItemNote,
+		IsIncreaseItem:   req.IsIncreaseItem,
+		BatchNo:          req.BatchNo,
+		ExpDate:          req.ExpDate,
+		AdjustRatio:      req.AdjustRatio,
+		UnitPriceWithTax: req.UnitPriceWithTax,
+		SpecialInfo:      toSpecialInfo(req.SpecialInfo),
 	}
 
 	if err := h.svc.AddItem(c.Request.Context(), invoiceID, item); err != nil {
@@ -308,6 +322,17 @@ func (h *InvoiceHandler) GetHistory(c *gin.Context) {
 }
 
 // handleError maps domain.AppError to HTTP response.
+func toSpecialInfo(items []dto.SpecialInfoItem) []domain.SpecialInfoItem {
+	if len(items) == 0 {
+		return nil
+	}
+	result := make([]domain.SpecialInfoItem, len(items))
+	for i, item := range items {
+		result[i] = domain.SpecialInfoItem{Name: item.Name, Value: item.Value}
+	}
+	return result
+}
+
 func handleError(c *gin.Context, err error) {
 	var appErr *domain.AppError
 	if errors.As(err, &appErr) {

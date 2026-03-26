@@ -44,9 +44,9 @@ type GeneralInvoiceInfo struct {
 	InvoiceType     string `json:"invoiceType"`
 	TemplateCode    string `json:"templateCode"`
 	InvoiceSeries   string `json:"invoiceSeries"`
-	TransactionUuid string `json:"transactionUuid,omitempty"`
+	TransactionUuid string `json:"transactionUuid"` // required; min 10, max 36; UUID v4 recommended
 	CurrencyCode    string `json:"currencyCode"`
-	ExchangeRate    *int   `json:"exchangeRate,omitempty"` // default 1
+	ExchangeRate    *float64 `json:"exchangeRate,omitempty"` // default 1; BigDecimal (max 11 integer + 2 decimal digits)
 
 	// Adjustment / replacement fields
 	AdjustmentType        string `json:"adjustmentType,omitempty"`        // 1=original, 3=replacement, 5=adjustment
@@ -78,61 +78,86 @@ type GeneralInvoiceInfo struct {
 
 // BuyerInfo contains buyer/customer data (§6.4).
 type BuyerInfo struct {
-	BuyerName          string `json:"buyerName,omitempty"`
-	BuyerCode          string `json:"buyerCode,omitempty"`
-	BuyerLegalName     string `json:"buyerLegalName,omitempty"`
-	BuyerTaxCode       string `json:"buyerTaxCode,omitempty"`
-	BuyerAddressLine   string `json:"buyerAddressLine,omitempty"`
-	BuyerPhoneNumber   string `json:"buyerPhoneNumber,omitempty"`
-	BuyerEmail         string `json:"buyerEmail,omitempty"`
-	BuyerBankName      string `json:"buyerBankName,omitempty"`
-	BuyerBankAccount   string `json:"buyerBankAccount,omitempty"`
-	BuyerIdType        *int   `json:"buyerIdType,omitempty"` // 1=CCCD, 3=Passport
-	BuyerIdNo          string `json:"buyerIdNo,omitempty"`
-	BuyerNotGetInvoice string `json:"buyerNotGetInvoice,omitempty"` // "0"=gets invoice, "1"=does not
-	BuyerBudgetCode    string `json:"buyerBudgetCode,omitempty"`
+	BuyerName          string `json:"buyerName,omitempty"`          // max 100
+	BuyerCode          string `json:"buyerCode,omitempty"`          // max 400
+	BuyerLegalName     string `json:"buyerLegalName,omitempty"`     // max 400; required if buyerTaxCode is set
+	BuyerTaxCode       string `json:"buyerTaxCode,omitempty"`       // max 20
+	BuyerBudgetCode    string `json:"buyerBudgetCode,omitempty"`    // max 7
+	BuyerAddressLine   string `json:"buyerAddressLine,omitempty"`   // max 1200; required when buyerNotGetInvoice=0
+	BuyerPhoneNumber   string `json:"buyerPhoneNumber,omitempty"`   // max 15
+	BuyerFaxNumber     string `json:"buyerFaxNumber,omitempty"`
+	BuyerEmail         string `json:"buyerEmail,omitempty"`         // max 2000; semicolon-separated for multiple
+	BuyerBankName      string `json:"buyerBankName,omitempty"`      // max 200
+	BuyerBankAccount   string `json:"buyerBankAccount,omitempty"`   // max 30
+	BuyerDistrictName  string `json:"buyerDistrictName,omitempty"`
+	BuyerCityName      string `json:"buyerCityName,omitempty"`
+	BuyerCountryCode   string `json:"buyerCountryCode,omitempty"`
+	BuyerIdType        string `json:"buyerIdType,omitempty"`        // "1"=CCCD, "3"=Passport
+	BuyerIdNo          string `json:"buyerIdNo,omitempty"`          // max 200; required when buyerIdType is set
+	BuyerBirthDay      string `json:"buyerBirthDay,omitempty"`
+	BuyerNotGetInvoice *int   `json:"buyerNotGetInvoice,omitempty"` // 0=gets invoice, 1=does not; default 0
 }
 
 // SellerInfo contains seller/vendor data (§6.3).
 // Optional — if sellerTaxCode is omitted, Viettel uses the portal config.
 type SellerInfo struct {
-	SellerLegalName   string `json:"sellerLegalName,omitempty"`
-	SellerTaxCode     string `json:"sellerTaxCode,omitempty"`
-	SellerAddressLine string `json:"sellerAddressLine,omitempty"`
-	SellerPhoneNumber string `json:"sellerPhoneNumber,omitempty"`
-	SellerEmail       string `json:"sellerEmail,omitempty"`
-	SellerBankName    string `json:"sellerBankName,omitempty"`
-	SellerBankAccount string `json:"sellerBankAccount,omitempty"`
+	SellerLegalName   string `json:"sellerLegalName,omitempty"`   // required when sellerTaxCode is set; max 400
+	SellerTaxCode     string `json:"sellerTaxCode,omitempty"`     // required; max 20
+	SellerAddressLine string `json:"sellerAddressLine,omitempty"` // required when sellerTaxCode is set; max 255
+	SellerPhoneNumber string `json:"sellerPhoneNumber,omitempty"` // max 50
+	SellerFaxNumber   string `json:"sellerFaxNumber,omitempty"`   // max 50
+	SellerEmail       string `json:"sellerEmail,omitempty"`       // max 50
+	SellerBankName    string `json:"sellerBankName,omitempty"`    // max 400
+	SellerBankAccount string `json:"sellerBankAccount,omitempty"` // max 30
+	SellerDistrictName string `json:"sellerDistrictName,omitempty"` // max 50
+	SellerCityName     string `json:"sellerCityName,omitempty"`     // max 600
+	SellerCountryCode  string `json:"sellerCountryCode,omitempty"`  // max 15
+	SellerWebsite      string `json:"sellerWebsite,omitempty"`      // max 200
+	StoreCode          string `json:"storeCode,omitempty"`          // max 50
+	StoreName          string `json:"storeName,omitempty"`          // max 400
+	MerchantCode       string `json:"merchantCode,omitempty"`       // max 4; required for qrcode78
+	MerchantName       string `json:"merchantName,omitempty"`       // max 25; required for qrcode78
+	MerchantCity       string `json:"merchantCity,omitempty"`       // max 15; required for qrcode78
 }
 
 // Payment describes a payment method entry (§6.5).
 type Payment struct {
 	PaymentMethod     string `json:"paymentMethod,omitempty"`     // 1-8
-	PaymentMethodName string `json:"paymentMethodName,omitempty"` // TM, CK, TM/CK, ...
+	PaymentMethodName string `json:"paymentMethodName"` // required; TM, CK, TM/CK, DTCN, KHAC, etc.
 }
 
 // ItemInfo represents a line item on the invoice (§6.6).
 type ItemInfo struct {
 	LineNumber                   *int     `json:"lineNumber,omitempty"`
-	Selection                    *int     `json:"selection,omitempty"` // 1=goods,2=note,3=discount,4=table,5=other fee,6=special
-	ItemCode                     string   `json:"itemCode,omitempty"`
-	ItemName                     string   `json:"itemName,omitempty"`
-	UnitCode                     string   `json:"unitCode,omitempty"`
-	UnitName                     string   `json:"unitName,omitempty"`
+	Selection                    *int     `json:"selection,omitempty"`    // 1=goods,2=note,3=discount,4=table/fee,5=promo(TT78),6=special(ND70)
+	ItemType                     *int     `json:"itemType,omitempty"`    // required when selection=6; 1-6 per ND70
+	ItemCode                     string   `json:"itemCode,omitempty"`    // max 50
+	ItemName                     string   `json:"itemName,omitempty"`    // max 500
+	UnitCode                     string   `json:"unitCode,omitempty"`    // max 100
+	UnitName                     string   `json:"unitName,omitempty"`    // max 300
 	Quantity                     *float64 `json:"quantity,omitempty"`
 	UnitPrice                    *float64 `json:"unitPrice,omitempty"`
-	ItemTotalAmountWithoutTax    *float64 `json:"itemTotalAmountWithoutTax,omitempty"`
+	UnitPriceWithTax             *float64 `json:"unitPriceWithTax,omitempty"` // unit price including tax (draft fuel invoices)
+	ItemTotalAmountWithoutTax    *float64 `json:"itemTotalAmountWithoutTax"` // required; max 13 digits; = quantity * unitPrice
 	ItemTotalAmountAfterDiscount *float64 `json:"itemTotalAmountAfterDiscount,omitempty"`
 	ItemTotalAmountWithTax       *float64 `json:"itemTotalAmountWithTax,omitempty"`
 	TaxPercentage                *float64 `json:"taxPercentage,omitempty"` // -2=no tax, -1=not declared, 0,5,8,10
 	TaxAmount                    *float64 `json:"taxAmount,omitempty"`
-	Discount                     *float64 `json:"discount,omitempty"`     // % discount
-	ItemDiscount                 *float64 `json:"itemDiscount,omitempty"` // amount discount
-	ItemNote                     string   `json:"itemNote,omitempty"`
+	Discount                     *float64 `json:"discount,omitempty"`     // % discount on unit price
+	Discount2                    *float64 `json:"discount2,omitempty"`    // second % discount on unit price
+	ItemDiscount                 *float64 `json:"itemDiscount,omitempty"` // discount amount (system-calculated)
+	ItemNote                     string   `json:"itemNote,omitempty"`     // max 300
 	IsIncreaseItem               *bool    `json:"isIncreaseItem,omitempty"` // nil=normal, false=decrease, true=increase
-	BatchNo                      string   `json:"batchNo,omitempty"`
-	ExpDate                      string   `json:"expDate,omitempty"`
-	AdjustRatio                  string   `json:"adjustRatio,omitempty"`
+	BatchNo                      string   `json:"batchNo,omitempty"`      // max 300
+	ExpDate                      string   `json:"expDate,omitempty"`      // max 50
+	AdjustRatio                  string   `json:"adjustRatio,omitempty"`  // "1","2","3","5"; used with adjustAmount20="0"
+	SpecialInfo                  []SpecialInfoItem `json:"specialInfo,omitempty"` // required when selection=6 (ND70)
+}
+
+// SpecialInfoItem represents a special goods attribute per ND70.
+type SpecialInfoItem struct {
+	Name  string `json:"name,omitempty"`
+	Value string `json:"value,omitempty"`
 }
 
 // TaxBreakdown groups tax amounts by tax rate (§6.7).
@@ -309,16 +334,16 @@ const (
 
 // viettelErrCodeMap maps Viettel message strings to typed error codes.
 var viettelErrCodeMap = map[string]ViettelErrCode{
-	"TAX_CODE_INVALID":                            ViettelErrTaxCodeInvalid,
-	"INVOICE_VALID_INPUT_INVALID_TAX_CODE":        ViettelErrTaxCodeInvalid,
-	"INVOICE_VALID_INPUT_INVALID_BUYER_TAX_CODE":  ViettelErrTaxCodeInvalid,
-	"TRANSACTION_UUID_REQUIRED":                   ViettelErrTxnUuidRequired,
-	"TAX_CODE_REQUIRED":                           ViettelErrTaxCodeRequired,
-	"BUYER_EMAIL_REQUIRED":                        ViettelErrBuyerEmailRequired,
-	"NOT_FOUND_DATA":                              ViettelErrNotFoundData,
-	"BUYER_EMAIL_ADDRESS_FORMAT":                  ViettelErrBuyerEmailFormat,
-	"EMAIL_CONFIG_NOT_ACTIVE":                     ViettelErrEmailConfigNotActive,
-	"EMAIL_NOT_CONFIG":                            ViettelErrEmailNotConfig,
+	"TAX_CODE_INVALID":                           ViettelErrTaxCodeInvalid,
+	"INVOICE_VALID_INPUT_INVALID_TAX_CODE":       ViettelErrTaxCodeInvalid,
+	"INVOICE_VALID_INPUT_INVALID_BUYER_TAX_CODE": ViettelErrTaxCodeInvalid,
+	"TRANSACTION_UUID_REQUIRED":                  ViettelErrTxnUuidRequired,
+	"TAX_CODE_REQUIRED":                          ViettelErrTaxCodeRequired,
+	"BUYER_EMAIL_REQUIRED":                       ViettelErrBuyerEmailRequired,
+	"NOT_FOUND_DATA":                             ViettelErrNotFoundData,
+	"BUYER_EMAIL_ADDRESS_FORMAT":                 ViettelErrBuyerEmailFormat,
+	"EMAIL_CONFIG_NOT_ACTIVE":                    ViettelErrEmailConfigNotActive,
+	"EMAIL_NOT_CONFIG":                           ViettelErrEmailNotConfig,
 }
 
 // nonRetryableViettelErrors lists error codes that should never be retried.
