@@ -29,25 +29,27 @@ func TestMapInvoiceToViettel(t *testing.T) {
 
 	txnUuid := uuid.New().String()
 	invoice := &domain.Invoice{
-		ID:              uuid.New(),
-		TransactionUuid: &txnUuid,
-		CustomerName:    "Cong ty ABC",
-		CustomerTaxID:   "0123456789",
-		CustomerAddress: "123 Nguyen Hue, HCM",
-		Currency:        "VND",
-		TotalAmount:     11000,
-		TaxAmount:       1000,
-		NetAmount:       10000,
-		Notes:           "Test invoice",
+		ID:                    uuid.New(),
+		TransactionUuid:       &txnUuid,
+		BuyerName:             "Nguyen Van A",
+		BuyerLegalName:        "Cong ty ABC",
+		BuyerTaxCode:          "0123456789",
+		BuyerAddress:          "123 Nguyen Hue, HCM",
+		Currency:              "VND",
+		TotalAmountWithTax:    11000,
+		TotalTaxAmount:        1000,
+		TotalAmountWithoutTax: 10000,
+		Notes:                 "Test invoice",
 		Items: []*domain.InvoiceItem{
 			{
-				ID:          uuid.New(),
-				Description: "Service A",
-				Quantity:    2,
-				UnitPrice:   5000,
-				TaxRate:     10,
-				TaxAmount:   1000,
-				LineTotal:   11000,
+				ID:                        uuid.New(),
+				ItemName:                  "Service A",
+				Quantity:                  2,
+				UnitPrice:                 5000,
+				TaxPercentage:             10,
+				TaxAmount:                 1000,
+				ItemTotalAmountWithoutTax: 10000,
+				ItemTotalAmountWithTax:    11000,
 			},
 		},
 	}
@@ -97,10 +99,11 @@ func TestMapInvoiceToViettel(t *testing.T) {
 func TestMapInvoiceToViettel_MultipleItems(t *testing.T) {
 	cfg := config.ThirdPartyConfig{InvoiceType: "1", TemplateCode: "01GTKT0/001", InvoiceSeries: "AA/22E"}
 	invoice := &domain.Invoice{
-		ID: uuid.New(), Currency: "VND", TotalAmount: 23100, TaxAmount: 2100, NetAmount: 21000,
+		ID: uuid.New(), Currency: "VND",
+		TotalAmountWithTax: 23100, TotalTaxAmount: 2100, TotalAmountWithoutTax: 21000,
 		Items: []*domain.InvoiceItem{
-			{Description: "Item A", Quantity: 1, UnitPrice: 10000, TaxRate: 10, TaxAmount: 1000, LineTotal: 11000},
-			{Description: "Item B", Quantity: 2, UnitPrice: 5000, TaxRate: 5, TaxAmount: 500, LineTotal: 10500},
+			{ItemName: "Item A", Quantity: 1, UnitPrice: 10000, TaxPercentage: 10, TaxAmount: 1000, ItemTotalAmountWithoutTax: 10000, ItemTotalAmountWithTax: 11000},
+			{ItemName: "Item B", Quantity: 2, UnitPrice: 5000, TaxPercentage: 5, TaxAmount: 500, ItemTotalAmountWithoutTax: 10000, ItemTotalAmountWithTax: 10500},
 		},
 	}
 	result := MapInvoiceToViettel(invoice, cfg, sellerCfg)
@@ -159,9 +162,9 @@ func TestMapInvoiceToViettel_ReusesUuid(t *testing.T) {
 
 func TestBuildTaxBreakdowns_GroupsByRate(t *testing.T) {
 	items := []*domain.InvoiceItem{
-		{UnitPrice: 1000, Quantity: 1, TaxRate: 10, TaxAmount: 100},
-		{UnitPrice: 2000, Quantity: 1, TaxRate: 10, TaxAmount: 200},
-		{UnitPrice: 3000, Quantity: 1, TaxRate: 5, TaxAmount: 150},
+		{UnitPrice: 1000, Quantity: 1, TaxPercentage: 10, TaxAmount: 100, ItemTotalAmountWithoutTax: 1000},
+		{UnitPrice: 2000, Quantity: 1, TaxPercentage: 10, TaxAmount: 200, ItemTotalAmountWithoutTax: 2000},
+		{UnitPrice: 3000, Quantity: 1, TaxPercentage: 5, TaxAmount: 150, ItemTotalAmountWithoutTax: 3000},
 	}
 	breakdowns := buildTaxBreakdowns(items)
 	if len(breakdowns) != 2 {

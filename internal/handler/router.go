@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
@@ -14,7 +15,12 @@ import (
 func NewRouter(log *zerolog.Logger, dbPool *pgxpool.Pool, invoiceSvc *service.InvoiceService) *gin.Engine {
 	router := gin.New()
 	router.Use(gin.Recovery())
-
+	router.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"http://localhost:3000"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept"},
+		AllowCredentials: true,
+	}))
 	inv := NewInvoiceHandler(invoiceSvc, log)
 
 	// System endpoints
@@ -29,14 +35,11 @@ func NewRouter(log *zerolog.Logger, dbPool *pgxpool.Pool, invoiceSvc *service.In
 			invoices.POST("", inv.CreateInvoice)
 			invoices.GET("", inv.ListInvoices)
 			invoices.GET("/:id", inv.GetInvoice)
-			invoices.PUT("/:id", inv.UpdateInvoice)
 			invoices.DELETE("/:id", inv.CancelInvoice)
 
-			invoices.POST("/:id/items", inv.AddItem)
-			invoices.DELETE("/:id/items/:itemId", inv.RemoveItem)
-
+			invoices.PATCH("/:id/payment", inv.UpdatePayment)
 			invoices.POST("/:id/submit", inv.SubmitInvoice)
-			invoices.POST("/send-to-tax", inv.SendInvoiceToTax)
+			invoices.POST("/report-to-authority", inv.ReportToAuthority)
 
 			invoices.GET("/:id/status", inv.GetStatus)
 			invoices.GET("/:id/history", inv.GetHistory)

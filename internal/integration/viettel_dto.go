@@ -317,23 +317,23 @@ type ViettelDraftRequest = ViettelInvoiceRequest
 // Send Invoice to Tax Authority request/response (§7.36)
 // ---------------------------------------------------------------------------
 
-// SendToTaxRequest is the form data for sendInvoiceByTransactionUuid.
-type SendToTaxRequest struct {
+// ReportToAuthorityRequest is the form data for sendInvoiceByTransactionUuid.
+type ReportToAuthorityRequest struct {
 	SupplierTaxCode string `json:"supplierTaxCode"` // required; seller tax code
 	TransactionUuid string `json:"transactionUuid"` // required; comma-separated UUIDs (10-36 chars each)
 	StartDate       string `json:"startDate"`       // required; format "2019-05-12"
 	EndDate         string `json:"endDate"`         // required; format "2019-05-12"
 }
 
-// ErrorDetail represents a single error entry in SendToTaxResponse.ErrorList.
+// ErrorDetail represents a single error entry in ReportToAuthorityResponse.ErrorList.
 type ErrorDetail struct {
 	TransactionUuid string `json:"transactionUuid"` // comma-separated UUIDs that share this error
 	Detail          string `json:"detail"`           // error description
 	Message         string `json:"message"`          // error code (e.g. "INVOCIE_NOT_FOUND")
 }
 
-// SendToTaxResponse is the JSON returned by sendInvoiceByTransactionUuid (§7.36).
-type SendToTaxResponse struct {
+// ReportToAuthorityResponse is the JSON returned by sendInvoiceByTransactionUuid (§7.36).
+type ReportToAuthorityResponse struct {
 	ErrorCode   *string       `json:"errorCode"`
 	Description *string       `json:"description"`
 	Total       string        `json:"total"`   // total invoice count

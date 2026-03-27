@@ -47,22 +47,38 @@ type Invoice struct {
 	ExternalID      *string        `json:"external_id,omitempty"`
 	TransactionUuid *string        `json:"transaction_uuid,omitempty"`
 	Status          InvoiceStatus  `json:"status"`
-	CustomerName    string         `json:"customer_name"`
-	CustomerTaxID   string         `json:"customer_tax_id,omitempty"`
-	CustomerAddress string         `json:"customer_address,omitempty"`
-	Currency            string         `json:"currency"`
-	OriginalCurrency    string         `json:"original_currency"`
-	ExchangeRate        float64        `json:"exchange_rate"`
-	TotalAmount         float64        `json:"total_amount"`
-	TaxAmount           float64        `json:"tax_amount"`
-	NetAmount           float64        `json:"net_amount"`
-	OriginalTotalAmount float64        `json:"original_total_amount"`
-	OriginalTaxAmount   float64        `json:"original_tax_amount"`
-	OriginalNetAmount   float64        `json:"original_net_amount"`
-	TransactionHash     string         `json:"transaction_hash,omitempty"`
-	Notes               string         `json:"notes,omitempty"`
+
+	// Buyer info — maps to Viettel buyerInfo
+	BuyerName       string         `json:"buyer_name"`
+	BuyerLegalName  string         `json:"buyer_legal_name,omitempty"`
+	BuyerTaxCode    string         `json:"buyer_tax_code,omitempty"`
+	BuyerAddress    string         `json:"buyer_address,omitempty"`
+	BuyerEmail      string         `json:"buyer_email,omitempty"`
+	BuyerPhone      string         `json:"buyer_phone,omitempty"`
+	BuyerCode       string         `json:"buyer_code,omitempty"`
+
+	// VND amounts — sent to Viettel API
+	Currency                string  `json:"currency"`
+	TotalAmountWithTax      float64 `json:"total_amount_with_tax"`
+	TotalTaxAmount          float64 `json:"total_tax_amount"`
+	TotalAmountWithoutTax   float64 `json:"total_amount_without_tax"`
+
+	// Token/crypto amounts — stored in DB as evidence only, NOT sent to Viettel
+	TokenCurrency       string  `json:"token_currency"`
+	ExchangeRate        float64 `json:"exchange_rate"`
+	ExchangeRateSource  string  `json:"exchange_rate_source,omitempty"`
+	HbarAmount          float64 `json:"hbar_amount,omitempty"`
+	TokenTotalAmount    float64 `json:"token_total_amount"`
+	TokenTaxAmount      float64 `json:"token_tax_amount"`
+	TokenNetAmount      float64 `json:"token_net_amount"`
+
+	// Payment & blockchain
+	PaymentMethod   string         `json:"payment_method,omitempty"`
+	TransactionHash string         `json:"transaction_hash,omitempty"`
+	ErpOrderID      string         `json:"erp_order_id,omitempty"`
+
+	Notes           string         `json:"notes,omitempty"`
 	IssuedAt        *time.Time     `json:"issued_at,omitempty"`
-	DueAt           *time.Time     `json:"due_at,omitempty"`
 	SubmittedAt     *time.Time     `json:"submitted_at,omitempty"`
 	CompletedAt     *time.Time     `json:"completed_at,omitempty"`
 	RetryCount      int            `json:"retry_count"`
@@ -75,19 +91,29 @@ type Invoice struct {
 
 // InvoiceItem is a line item in an invoice.
 type InvoiceItem struct {
-	ID          uuid.UUID `json:"id"`
-	InvoiceID   uuid.UUID `json:"invoice_id"`
-	Description string    `json:"description"`
-	Quantity    float64   `json:"quantity"`
-	UnitPrice   float64   `json:"unit_price"`
-	TaxRate     float64   `json:"tax_rate"`
-	TaxAmount         float64   `json:"tax_amount"`
-	LineTotal         float64   `json:"line_total"`
-	OriginalUnitPrice float64   `json:"original_unit_price"`
-	OriginalTaxAmount float64   `json:"original_tax_amount"`
-	OriginalLineTotal float64   `json:"original_line_total"`
-	SortOrder         int       `json:"sort_order"`
-	CreatedAt         time.Time `json:"created_at"`
+	ID        uuid.UUID `json:"id"`
+	InvoiceID uuid.UUID `json:"invoice_id"`
+
+	// Core fields — maps to Viettel itemInfo
+	ItemName   string  `json:"item_name"`
+	Quantity   float64 `json:"quantity"`
+	UnitPrice  float64 `json:"unit_price"`
+
+	// VND amounts — sent to Viettel
+	TaxPercentage               float64 `json:"tax_percentage"`
+	TaxAmount                   float64 `json:"tax_amount"`
+	ItemTotalAmountWithoutTax   float64 `json:"item_total_amount_without_tax"`
+	ItemTotalAmountWithTax      float64 `json:"item_total_amount_with_tax"`
+	ItemTotalAmountAfterDiscount *float64 `json:"item_total_amount_after_discount,omitempty"`
+	ItemDiscount                *float64 `json:"item_discount,omitempty"`
+
+	// Token amounts — DB evidence only
+	TokenUnitPrice float64 `json:"token_unit_price"`
+	TokenTaxAmount float64 `json:"token_tax_amount"`
+	TokenLineTotal float64 `json:"token_line_total"`
+
+	LineNumber int       `json:"line_number"`
+	CreatedAt  time.Time `json:"created_at"`
 
 	// Viettel ItemInfo fields
 	Selection       *int     `json:"selection,omitempty"`         // 1=goods,2=note,3=discount,4=table/fee,5=promo,6=special
@@ -141,5 +167,5 @@ type AuditLog struct {
 type InvoicePublisher interface {
 	CreateInvoice(ctx context.Context, invoice *Invoice) (externalID string, err error)
 	QueryStatus(ctx context.Context, externalID string) (status string, rawResponse []byte, err error)
-	SendToTax(ctx context.Context, transactionUuid, startDate, endDate string) (successCount, errorCount int, err error)
+	ReportToAuthority(ctx context.Context, transactionUuid, startDate, endDate string) (successCount, errorCount int, err error)
 }

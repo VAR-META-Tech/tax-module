@@ -238,14 +238,14 @@ func TestViettelPublisher_CreateInvoice(t *testing.T) {
 	publisher := NewViettelPublisher(client, cfg, config.SellerConfig{}, &log)
 
 	invoice := &domain.Invoice{
-		ID:           uuid.New(),
-		CustomerName: "Test Corp",
-		Currency:     "VND",
-		TotalAmount:  11000,
-		TaxAmount:    1000,
-		NetAmount:    10000,
+		ID:                    uuid.New(),
+		BuyerLegalName:        "Test Corp",
+		Currency:              "VND",
+		TotalAmountWithTax:    11000,
+		TotalTaxAmount:        1000,
+		TotalAmountWithoutTax: 10000,
 		Items: []*domain.InvoiceItem{
-			{Description: "Service", Quantity: 1, UnitPrice: 10000, TaxRate: 10, TaxAmount: 1000, LineTotal: 11000},
+			{ItemName: "Service", Quantity: 1, UnitPrice: 10000, TaxPercentage: 10, TaxAmount: 1000, ItemTotalAmountWithoutTax: 10000, ItemTotalAmountWithTax: 11000},
 		},
 	}
 
@@ -341,9 +341,9 @@ func TestViettelPublisher_QueryStatus_Pending(t *testing.T) {
 	}
 }
 
-// --- SendToTax tests ---
+// --- ReportToAuthority tests ---
 
-func TestViettelClient_SendToTaxByTransactionUuid(t *testing.T) {
+func TestViettelClient_ReportToAuthorityByTransactionUuid(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/auth/login", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(AuthResponse{AccessToken: "tok", ExpiresIn: 3600})
@@ -380,7 +380,7 @@ func TestViettelClient_SendToTaxByTransactionUuid(t *testing.T) {
 			t.Errorf("endDate = %q, want %q", r.FormValue("endDate"), "2025-01-01")
 		}
 
-		resp := SendToTaxResponse{
+		resp := ReportToAuthorityResponse{
 			Total:     "1",
 			Success:   "1",
 			Fail:      "0",
@@ -396,7 +396,7 @@ func TestViettelClient_SendToTaxByTransactionUuid(t *testing.T) {
 	cfg := config.ThirdPartyConfig{
 		BaseURL:       server.URL + "/api",
 		AuthURL:       server.URL + "/auth/login",
-		SendToTaxPath: "/InvoiceAPI/InvoiceWS/sendInvoiceByTransactionUuid",
+		ReportToAuthorityPath: "/InvoiceAPI/InvoiceWS/sendInvoiceByTransactionUuid",
 		SupplierCode:  "TAX123",
 		Username:      "u",
 		Password:      "p",
@@ -405,15 +405,15 @@ func TestViettelClient_SendToTaxByTransactionUuid(t *testing.T) {
 
 	client := NewViettelClient(cfg, newMemTokenRepo(), &log)
 
-	req := &SendToTaxRequest{
+	req := &ReportToAuthorityRequest{
 		SupplierTaxCode: "TAX123",
 		TransactionUuid: "txn-abc",
 		StartDate:       "2025-01-01",
 		EndDate:         "2025-01-01",
 	}
-	resp, err := client.SendToTaxByTransactionUuid(context.Background(), req)
+	resp, err := client.ReportToAuthorityByTransactionUuid(context.Background(), req)
 	if err != nil {
-		t.Fatalf("SendToTaxByTransactionUuid: %v", err)
+		t.Fatalf("ReportToAuthorityByTransactionUuid: %v", err)
 	}
 	if resp.Success != "1" {
 		t.Errorf("Success = %q, want %q", resp.Success, "1")
@@ -423,14 +423,14 @@ func TestViettelClient_SendToTaxByTransactionUuid(t *testing.T) {
 	}
 }
 
-func TestViettelPublisher_SendToTax_Success(t *testing.T) {
+func TestViettelPublisher_ReportToAuthority_Success(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/auth/login", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(AuthResponse{AccessToken: "tok", ExpiresIn: 3600})
 	})
 
 	mux.HandleFunc("/api/InvoiceAPI/InvoiceWS/sendInvoiceByTransactionUuid", func(w http.ResponseWriter, r *http.Request) {
-		resp := SendToTaxResponse{
+		resp := ReportToAuthorityResponse{
 			Total:     "1",
 			Success:   "1",
 			Fail:      "0",
@@ -446,7 +446,7 @@ func TestViettelPublisher_SendToTax_Success(t *testing.T) {
 	cfg := config.ThirdPartyConfig{
 		BaseURL:       server.URL + "/api",
 		AuthURL:       server.URL + "/auth/login",
-		SendToTaxPath: "/InvoiceAPI/InvoiceWS/sendInvoiceByTransactionUuid",
+		ReportToAuthorityPath: "/InvoiceAPI/InvoiceWS/sendInvoiceByTransactionUuid",
 		SupplierCode:  "TAX123",
 		Username:      "u",
 		Password:      "p",
@@ -458,9 +458,9 @@ func TestViettelPublisher_SendToTax_Success(t *testing.T) {
 
 	txnUuid := "txn-abc-123"
 
-	successCount, errorCount, err := publisher.SendToTax(context.Background(), txnUuid, "2026-03-01", "2026-03-31")
+	successCount, errorCount, err := publisher.ReportToAuthority(context.Background(), txnUuid, "2026-03-01", "2026-03-31")
 	if err != nil {
-		t.Fatalf("SendToTax: %v", err)
+		t.Fatalf("ReportToAuthority: %v", err)
 	}
 	if successCount != 1 {
 		t.Errorf("successCount = %d, want 1", successCount)
@@ -470,14 +470,14 @@ func TestViettelPublisher_SendToTax_Success(t *testing.T) {
 	}
 }
 
-func TestViettelPublisher_SendToTax_PartialFailure(t *testing.T) {
+func TestViettelPublisher_ReportToAuthority_PartialFailure(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/auth/login", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(AuthResponse{AccessToken: "tok", ExpiresIn: 3600})
 	})
 
 	mux.HandleFunc("/api/InvoiceAPI/InvoiceWS/sendInvoiceByTransactionUuid", func(w http.ResponseWriter, r *http.Request) {
-		resp := SendToTaxResponse{
+		resp := ReportToAuthorityResponse{
 			Total:   "2",
 			Success: "1",
 			Fail:    "1",
@@ -499,7 +499,7 @@ func TestViettelPublisher_SendToTax_PartialFailure(t *testing.T) {
 	cfg := config.ThirdPartyConfig{
 		BaseURL:       server.URL + "/api",
 		AuthURL:       server.URL + "/auth/login",
-		SendToTaxPath: "/InvoiceAPI/InvoiceWS/sendInvoiceByTransactionUuid",
+		ReportToAuthorityPath: "/InvoiceAPI/InvoiceWS/sendInvoiceByTransactionUuid",
 		SupplierCode:  "TAX123",
 		Username:      "u",
 		Password:      "p",
@@ -511,7 +511,7 @@ func TestViettelPublisher_SendToTax_PartialFailure(t *testing.T) {
 
 	txnUuid := "txn-abc-123"
 
-	successCount, errorCount, err := publisher.SendToTax(context.Background(), txnUuid, "2026-03-01", "2026-03-31")
+	successCount, errorCount, err := publisher.ReportToAuthority(context.Background(), txnUuid, "2026-03-01", "2026-03-31")
 	if err == nil {
 		t.Fatal("expected error for partial failure, got nil")
 	}
@@ -523,14 +523,14 @@ func TestViettelPublisher_SendToTax_PartialFailure(t *testing.T) {
 	}
 }
 
-func TestViettelPublisher_SendToTax_EmptyTransactionUuid(t *testing.T) {
+func TestViettelPublisher_ReportToAuthority_EmptyTransactionUuid(t *testing.T) {
 	log := zerolog.Nop()
 	cfg := config.ThirdPartyConfig{}
 	client := NewViettelClient(cfg, newMemTokenRepo(), &log)
 	publisher := NewViettelPublisher(client, cfg, config.SellerConfig{}, &log)
 
 	// Calling with empty transactionUuid will fail at the HTTP call level
-	_, _, err := publisher.SendToTax(context.Background(), "", "2026-03-01", "2026-03-31")
+	_, _, err := publisher.ReportToAuthority(context.Background(), "", "2026-03-01", "2026-03-31")
 	if err == nil {
 		t.Fatal("expected error for empty transaction_uuid, got nil")
 	}

@@ -103,9 +103,9 @@ func (p *ViettelPublisher) QueryStatus(ctx context.Context, externalID string) (
 	return "processing", rawResponse, nil
 }
 
-// SendToTax sends a completed invoice to the tax authority (CQT) via Viettel (§7.36).
-func (p *ViettelPublisher) SendToTax(ctx context.Context, transactionUuid, startDate, endDate string) (int, int, error) {
-	req := &SendToTaxRequest{
+// ReportToAuthority sends a completed invoice to the tax authority (CQT) via Viettel (§7.36).
+func (p *ViettelPublisher) ReportToAuthority(ctx context.Context, transactionUuid, startDate, endDate string) (int, int, error) {
+	req := &ReportToAuthorityRequest{
 		SupplierTaxCode: p.cfg.SupplierCode,
 		TransactionUuid: transactionUuid,
 		StartDate:       startDate,
@@ -118,7 +118,7 @@ func (p *ViettelPublisher) SendToTax(ctx context.Context, transactionUuid, start
 		Str("end_date", endDate).
 		Msg("Sending invoice to tax authority (CQT)")
 
-	resp, err := p.client.SendToTaxByTransactionUuid(ctx, req)
+	resp, err := p.client.ReportToAuthorityByTransactionUuid(ctx, req)
 	if err != nil {
 		return 0, 0, err
 	}

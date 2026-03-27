@@ -13,7 +13,7 @@ import (
 // --- Mock publisher ---
 
 type mockPublisher struct {
-	sendToTaxFn func(ctx context.Context, transactionUuid, startDate, endDate string) (int, int, error)
+	reportToAuthorityFn func(ctx context.Context, transactionUuid, startDate, endDate string) (int, int, error)
 }
 
 func (m *mockPublisher) CreateInvoice(_ context.Context, _ *domain.Invoice) (string, error) {
@@ -24,9 +24,9 @@ func (m *mockPublisher) QueryStatus(_ context.Context, _ string) (string, []byte
 	return "", nil, nil
 }
 
-func (m *mockPublisher) SendToTax(ctx context.Context, transactionUuid, startDate, endDate string) (int, int, error) {
-	if m.sendToTaxFn != nil {
-		return m.sendToTaxFn(ctx, transactionUuid, startDate, endDate)
+func (m *mockPublisher) ReportToAuthority(ctx context.Context, transactionUuid, startDate, endDate string) (int, int, error) {
+	if m.reportToAuthorityFn != nil {
+		return m.reportToAuthorityFn(ctx, transactionUuid, startDate, endDate)
 	}
 	return 1, 0, nil
 }
@@ -44,7 +44,10 @@ func (r *mockInvoiceRepo) GetByID(_ context.Context, id uuid.UUID) (*domain.Invo
 	return nil, domain.NewNotFoundError("invoice not found")
 }
 
-func (r *mockInvoiceRepo) Create(_ context.Context, _ *domain.Invoice) error              { return nil }
+func (r *mockInvoiceRepo) Create(_ context.Context, _ *domain.Invoice) error { return nil }
+func (r *mockInvoiceRepo) CreateWithItems(_ context.Context, _ *domain.Invoice) error {
+	return nil
+}
 func (r *mockInvoiceRepo) Update(_ context.Context, _ *domain.Invoice) error              { return nil }
 func (r *mockInvoiceRepo) List(_ context.Context, _ domain.InvoiceFilter) ([]*domain.Invoice, int64, error) {
 	return nil, 0, nil
@@ -77,23 +80,26 @@ func (r *mockInvoiceRepo) GetStatusHistory(_ context.Context, _ uuid.UUID) ([]*d
 	return nil, nil
 }
 func (r *mockInvoiceRepo) AddAuditLog(_ context.Context, _ *domain.AuditLog) error { return nil }
+func (r *mockInvoiceRepo) UpdateTransactionHash(_ context.Context, _ uuid.UUID, _ string) error {
+	return nil
+}
 
 // --- Tests ---
 
-func TestSendInvoiceToTax_Success(t *testing.T) {
+func TestReportToAuthority_Success(t *testing.T) {
 	log := zerolog.Nop()
 	svc := NewInvoiceService(
 		&mockInvoiceRepo{},
-		&mockPublisher{sendToTaxFn: func(_ context.Context, _, _, _ string) (int, int, error) {
+		&mockPublisher{reportToAuthorityFn: func(_ context.Context, _, _, _ string) (int, int, error) {
 			return 1, 0, nil
 		}},
 		nil,
 		&log,
 	)
 
-	successCount, errorCount, err := svc.SendInvoiceToTax(context.Background(), "txn-abc-123", "2026-03-01", "2026-03-31")
+	successCount, errorCount, err := svc.ReportToAuthority(context.Background(), "txn-abc-123", "2026-03-01", "2026-03-31")
 	if err != nil {
-		t.Fatalf("SendInvoiceToTax: %v", err)
+		t.Fatalf("ReportToAuthority: %v", err)
 	}
 	if successCount != 1 {
 		t.Errorf("successCount = %d, want 1", successCount)
@@ -103,35 +109,35 @@ func TestSendInvoiceToTax_Success(t *testing.T) {
 	}
 }
 
-func TestSendInvoiceToTax_PublisherError(t *testing.T) {
+func TestReportToAuthority_PublisherError(t *testing.T) {
 	log := zerolog.Nop()
 	svc := NewInvoiceService(
 		&mockInvoiceRepo{},
-		&mockPublisher{sendToTaxFn: func(_ context.Context, _, _, _ string) (int, int, error) {
+		&mockPublisher{reportToAuthorityFn: func(_ context.Context, _, _, _ string) (int, int, error) {
 			return 0, 0, domain.NewThirdPartyError("network error", nil)
 		}},
 		nil,
 		&log,
 	)
 
-	_, _, err := svc.SendInvoiceToTax(context.Background(), "txn-abc-123", "2026-03-01", "2026-03-31")
+	_, _, err := svc.ReportToAuthority(context.Background(), "txn-abc-123", "2026-03-01", "2026-03-31")
 	if err == nil {
 		t.Fatal("expected error from publisher, got nil")
 	}
 }
 
-func TestSendInvoiceToTax_PartialFailure(t *testing.T) {
+func TestReportToAuthority_PartialFailure(t *testing.T) {
 	log := zerolog.Nop()
 	svc := NewInvoiceService(
 		&mockInvoiceRepo{},
-		&mockPublisher{sendToTaxFn: func(_ context.Context, _, _, _ string) (int, int, error) {
+		&mockPublisher{reportToAuthorityFn: func(_ context.Context, _, _, _ string) (int, int, error) {
 			return 1, 1, domain.NewThirdPartyError("partial failure", nil)
 		}},
 		nil,
 		&log,
 	)
 
-	successCount, errorCount, err := svc.SendInvoiceToTax(context.Background(), "txn-abc-123", "2026-03-01", "2026-03-31")
+	successCount, errorCount, err := svc.ReportToAuthority(context.Background(), "txn-abc-123", "2026-03-01", "2026-03-31")
 	if err == nil {
 		t.Fatal("expected error for partial failure, got nil")
 	}

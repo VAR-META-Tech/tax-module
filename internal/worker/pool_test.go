@@ -38,7 +38,7 @@ func (m *mockPublisher) QueryStatus(_ context.Context, _ string) (string, []byte
 	return m.queryStatus, nil, nil
 }
 
-func (m *mockPublisher) SendToTax(_ context.Context, _, _, _ string) (int, int, error) {
+func (m *mockPublisher) ReportToAuthority(_ context.Context, _, _, _ string) (int, int, error) {
 	return 0, 0, nil
 }
 
@@ -62,6 +62,17 @@ func (r *mockRepo) Create(_ context.Context, inv *domain.Invoice) error {
 	defer r.mu.Unlock()
 	r.invoices[inv.ID] = inv
 	r.statuses[inv.ID] = inv.Status
+	return nil
+}
+
+func (r *mockRepo) CreateWithItems(_ context.Context, inv *domain.Invoice) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.invoices[inv.ID] = inv
+	r.statuses[inv.ID] = inv.Status
+	for _, item := range inv.Items {
+		r.items[inv.ID] = append(r.items[inv.ID], item)
+	}
 	return nil
 }
 
@@ -142,6 +153,9 @@ func (r *mockRepo) GetStatusHistory(_ context.Context, _ uuid.UUID) ([]*domain.I
 	return nil, nil
 }
 func (r *mockRepo) AddAuditLog(_ context.Context, _ *domain.AuditLog) error { return nil }
+func (r *mockRepo) UpdateTransactionHash(_ context.Context, _ uuid.UUID, _ string) error {
+	return nil
+}
 
 func (r *mockRepo) getStatus(id uuid.UUID) domain.InvoiceStatus {
 	r.mu.Lock()
@@ -167,7 +181,7 @@ func TestPool_PublishInvoice(t *testing.T) {
 	inv := &domain.Invoice{ID: invID, Status: domain.StatusSubmitted, Currency: "VND"}
 	repo.Create(context.Background(), inv)
 	repo.items[invID] = []*domain.InvoiceItem{
-		{ID: uuid.New(), InvoiceID: invID, Description: "Test", Quantity: 1, UnitPrice: 1000},
+		{ID: uuid.New(), InvoiceID: invID, ItemName: "Test", Quantity: 1, UnitPrice: 1000, ItemTotalAmountWithoutTax: 1000},
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -217,7 +231,7 @@ func TestPool_PublishError_Retry(t *testing.T) {
 	inv := &domain.Invoice{ID: invID, Status: domain.StatusSubmitted, Currency: "VND"}
 	repo.Create(context.Background(), inv)
 	repo.items[invID] = []*domain.InvoiceItem{
-		{ID: uuid.New(), InvoiceID: invID, Description: "Test", Quantity: 1, UnitPrice: 1000},
+		{ID: uuid.New(), InvoiceID: invID, ItemName: "Test", Quantity: 1, UnitPrice: 1000, ItemTotalAmountWithoutTax: 1000},
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
