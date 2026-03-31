@@ -42,8 +42,8 @@ func (m *mockPublisher) ReportToAuthority(_ context.Context, _, _, _ string) (in
 	return 0, 0, nil
 }
 
-func (m *mockPublisher) DownloadInvoiceFile(_ context.Context, _ string, _ string) ([]byte, error) {
-	return nil, nil
+func (m *mockPublisher) DownloadInvoiceFile(_ context.Context, _ string, _ string) (string, error) {
+	return "", nil
 }
 
 type mockRepo struct {
