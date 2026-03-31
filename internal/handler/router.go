@@ -41,6 +41,7 @@ func NewRouter(log *zerolog.Logger, dbPool *pgxpool.Pool, invoiceSvc *service.In
 			invoices.POST("/:id/submit", inv.SubmitInvoice)
 			invoices.POST("/report-to-authority", inv.ReportToAuthority)
 
+			invoices.GET("/:id/pdf", inv.DownloadPDF)
 			invoices.GET("/:id/status", inv.GetStatus)
 			invoices.GET("/:id/history", inv.GetHistory)
 		}

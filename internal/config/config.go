@@ -47,6 +47,7 @@ type ThirdPartyConfig struct {
 	CreateInvoicePath string        `mapstructure:"THIRD_PARTY_CREATE_PATH"`
 	QueryStatusPath   string        `mapstructure:"THIRD_PARTY_QUERY_PATH"`
 	ReportToAuthorityPath string    `mapstructure:"THIRD_PARTY_REPORT_TO_AUTHORITY_PATH"`
+	GetFilePath           string    `mapstructure:"THIRD_PARTY_GET_FILE_PATH"`
 	SupplierCode      string        `mapstructure:"THIRD_PARTY_SUPPLIER_CODE"`
 	Username          string        `mapstructure:"THIRD_PARTY_USERNAME"`
 	Password          string        `mapstructure:"THIRD_PARTY_PASSWORD"`
@@ -103,6 +104,7 @@ func Load() (*Config, error) {
 	viper.SetDefault("THIRD_PARTY_CREATE_PATH", "/InvoiceAPI/InvoiceWS/createInvoice")
 	viper.SetDefault("THIRD_PARTY_QUERY_PATH", "/InvoiceAPI/InvoiceWS/searchInvoiceByTransactionUuid")
 	viper.SetDefault("THIRD_PARTY_REPORT_TO_AUTHORITY_PATH", "/InvoiceAPI/InvoiceWS/sendInvoiceByTransactionUuid")
+	viper.SetDefault("THIRD_PARTY_GET_FILE_PATH", "/InvoiceAPI/InvoiceUtilsWS/getInvoiceRepresentationFile")
 	viper.SetDefault("THIRD_PARTY_SUPPLIER_CODE", "")
 	viper.SetDefault("THIRD_PARTY_USERNAME", "")
 	viper.SetDefault("THIRD_PARTY_PASSWORD", "")
@@ -160,6 +162,7 @@ func Load() (*Config, error) {
 			CreateInvoicePath: viper.GetString("THIRD_PARTY_CREATE_PATH"),
 			QueryStatusPath:   viper.GetString("THIRD_PARTY_QUERY_PATH"),
 			ReportToAuthorityPath: viper.GetString("THIRD_PARTY_REPORT_TO_AUTHORITY_PATH"),
+			GetFilePath:           viper.GetString("THIRD_PARTY_GET_FILE_PATH"),
 			SupplierCode:      viper.GetString("THIRD_PARTY_SUPPLIER_CODE"),
 			Username:          viper.GetString("THIRD_PARTY_USERNAME"),
 			Password:          viper.GetString("THIRD_PARTY_PASSWORD"),

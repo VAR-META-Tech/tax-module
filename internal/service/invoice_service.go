@@ -167,6 +167,25 @@ func (s *InvoiceService) GetStatusHistory(ctx context.Context, invoiceID uuid.UU
 	return s.repo.GetStatusHistory(ctx, invoiceID)
 }
 
+// DownloadInvoiceFile downloads the invoice PDF from the third-party provider and returns the base64 string.
+func (s *InvoiceService) DownloadInvoiceFile(ctx context.Context, id uuid.UUID) (string, string, error) {
+	invoice, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return "", "", err
+	}
+
+	if invoice.ExternalID == nil || *invoice.ExternalID == "" {
+		return "", "", domain.NewValidationError("invoice has not been published to Viettel yet")
+	}
+
+	fileBase64, err := s.publisher.DownloadInvoiceFile(ctx, *invoice.ExternalID, "PDF")
+	if err != nil {
+		return "", "", err
+	}
+
+	return fileBase64, *invoice.ExternalID, nil
+}
+
 // ReportToAuthority sends a completed invoice to the tax authority (CQT).
 func (s *InvoiceService) ReportToAuthority(ctx context.Context, transactionUuid, startDate, endDate string) (int, int, error) {
 	successCount, errorCount, err := s.publisher.ReportToAuthority(ctx, transactionUuid, startDate, endDate)

@@ -145,3 +145,29 @@ func (p *ViettelPublisher) ReportToAuthority(ctx context.Context, transactionUui
 
 	return successCount, errorCount, nil
 }
+
+// DownloadInvoiceFile downloads the invoice PDF/ZIP from Viettel and returns the raw base64 string.
+func (p *ViettelPublisher) DownloadInvoiceFile(ctx context.Context, invoiceNo, fileType string) (string, error) {
+	req := &GetInvoiceFileRequest{
+		SupplierTaxCode: p.cfg.SupplierCode,
+		InvoiceNo:       invoiceNo,
+		TemplateCode:    p.cfg.TemplateCode,
+		FileType:        fileType,
+	}
+
+	p.log.Info().
+		Str("invoice_no", invoiceNo).
+		Str("file_type", fileType).
+		Msg("Downloading invoice file from Viettel")
+
+	resp, err := p.client.GetInvoiceFile(ctx, req)
+	if err != nil {
+		return "", err
+	}
+
+	if resp.FileToBytes == "" {
+		return "", domain.NewThirdPartyError("viettel returned empty file content", nil)
+	}
+
+	return resp.FileToBytes, nil
+}
