@@ -163,6 +163,36 @@ func (c *ViettelClient) SearchByTransactionUuid(ctx context.Context, transaction
 	return &resp, nil
 }
 
+// GetInvoiceFile downloads the invoice representation file (PDF/ZIP) from Viettel.
+func (c *ViettelClient) GetInvoiceFile(ctx context.Context, req *GetInvoiceFileRequest) (*GetInvoiceFileResponse, error) {
+	url := fmt.Sprintf("%s%s", c.cfg.BaseURL, c.cfg.GetFilePath)
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, domain.NewInternalError("marshal get file request", err)
+	}
+
+	rawBody, err := c.doAuthenticatedRequest(ctx, http.MethodPost, url, "application/json", body)
+	if err != nil {
+		return nil, err
+	}
+
+	var resp GetInvoiceFileResponse
+	if err := json.Unmarshal(rawBody, &resp); err != nil {
+		return nil, domain.NewThirdPartyError("decode get file response", err)
+	}
+
+	if resp.ErrorCode != 200 {
+		desc := ""
+		if resp.Description != nil {
+			desc = *resp.Description
+		}
+		return nil, domain.NewThirdPartyError(fmt.Sprintf("viettel getInvoiceFile error (code %d): %s", resp.ErrorCode, desc), nil)
+	}
+
+	return &resp, nil
+}
+
 // doAuthenticatedRequest sends an HTTP request with Viettel token cookie.
 // On 401, it re-authenticates once and retries.
 func (c *ViettelClient) doAuthenticatedRequest(ctx context.Context, method, url, contentType string, body []byte) ([]byte, error) {

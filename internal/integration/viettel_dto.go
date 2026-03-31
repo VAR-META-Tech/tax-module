@@ -253,11 +253,12 @@ type GetInvoiceFileRequest struct {
 }
 
 // GetInvoiceFileResponse is the JSON returned by getInvoiceRepresentationFile.
+// Note: this endpoint returns errorCode as int (e.g. 200), unlike other endpoints that use string.
 type GetInvoiceFileResponse struct {
-	ErrorCode   *string `json:"errorCode"`
+	ErrorCode   int     `json:"errorCode"`
 	Description *string `json:"description"`
 	FileName    string  `json:"fileName,omitempty"`
-	FileToBytes []byte  `json:"fileToBytes,omitempty"`
+	FileToBytes string  `json:"fileToBytes,omitempty"` // base64-encoded file content
 }
 
 // ---------------------------------------------------------------------------

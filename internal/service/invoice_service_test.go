@@ -31,6 +31,10 @@ func (m *mockPublisher) ReportToAuthority(ctx context.Context, transactionUuid, 
 	return 1, 0, nil
 }
 
+func (m *mockPublisher) DownloadInvoiceFile(_ context.Context, _ string, _ string) ([]byte, error) {
+	return nil, nil
+}
+
 // --- Mock repo ---
 
 type mockInvoiceRepo struct {

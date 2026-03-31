@@ -2,6 +2,7 @@ package integration
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"strconv"
 
@@ -144,4 +145,35 @@ func (p *ViettelPublisher) ReportToAuthority(ctx context.Context, transactionUui
 		Msg("Invoice sent to tax authority successfully")
 
 	return successCount, errorCount, nil
+}
+
+// DownloadInvoiceFile downloads the invoice PDF/ZIP from Viettel.
+func (p *ViettelPublisher) DownloadInvoiceFile(ctx context.Context, invoiceNo, fileType string) ([]byte, error) {
+	req := &GetInvoiceFileRequest{
+		SupplierTaxCode: p.cfg.SupplierCode,
+		InvoiceNo:       invoiceNo,
+		TemplateCode:    p.cfg.TemplateCode,
+		FileType:        fileType,
+	}
+
+	p.log.Info().
+		Str("invoice_no", invoiceNo).
+		Str("file_type", fileType).
+		Msg("Downloading invoice file from Viettel")
+
+	resp, err := p.client.GetInvoiceFile(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.FileToBytes == "" {
+		return nil, domain.NewThirdPartyError("viettel returned empty file content", nil)
+	}
+
+	fileBytes, err := base64.StdEncoding.DecodeString(resp.FileToBytes)
+	if err != nil {
+		return nil, domain.NewThirdPartyError("decode file content from base64", err)
+	}
+
+	return fileBytes, nil
 }

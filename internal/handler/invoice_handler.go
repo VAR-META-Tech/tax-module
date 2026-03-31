@@ -300,6 +300,25 @@ func (h *InvoiceHandler) GetHistory(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.SuccessResponse(history))
 }
 
+// DownloadPDF godoc GET /api/v1/invoices/:id/pdf
+// Downloads the invoice PDF from Viettel and returns it as a binary file.
+func (h *InvoiceHandler) DownloadPDF(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, dto.ErrorResponse("VALIDATION_ERROR", "invalid invoice id"))
+		return
+	}
+
+	fileBytes, invoiceNo, err := h.svc.DownloadInvoiceFile(c.Request.Context(), id)
+	if err != nil {
+		handleError(c, err)
+		return
+	}
+
+	c.Header("Content-Disposition", "attachment; filename=invoice_"+invoiceNo+".pdf")
+	c.Data(http.StatusOK, "application/pdf", fileBytes)
+}
+
 func toSpecialInfo(items []dto.SpecialInfoItem) []domain.SpecialInfoItem {
 	if len(items) == 0 {
 		return nil

@@ -42,6 +42,10 @@ func (m *mockPublisher) ReportToAuthority(_ context.Context, _, _, _ string) (in
 	return 0, 0, nil
 }
 
+func (m *mockPublisher) DownloadInvoiceFile(_ context.Context, _ string, _ string) ([]byte, error) {
+	return nil, nil
+}
+
 type mockRepo struct {
 	mu       sync.Mutex
 	invoices map[uuid.UUID]*domain.Invoice
