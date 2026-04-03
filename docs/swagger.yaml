@@ -1,0 +1,1140 @@
+openapi: 3.0.3
+info:
+  title: Tax Module API
+  description: |
+    Internal invoice management API for the Hedera Tax Module.
+    Handles the full invoice lifecycle: creation, submission to Viettel SInvoice,
+    status tracking, and reporting to tax authority (CQT).
+
+    ## Invoice Lifecycle
+
+    ```
+    draft → submitted → processing → completed
+                ↓            ↓
+              failed ──→ submitted (retry)
+    ```
+
+    Any non-completed invoice can be cancelled.
+
+    ## Authentication
+
+    No authentication — APIs are internal-only, called by trusted microservices.
+  version: 1.0.0
+  contact:
+    name: Varmeta Team
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+tags:
+  - name: System
+    description: Health and readiness checks
+  - name: Invoices
+    description: Invoice CRUD and lifecycle management
+  - name: Payment
+    description: Blockchain payment tracking
+  - name: Tax Authority
+    description: Reporting invoices to tax authority (CQT)
+
+paths:
+  /health:
+    get:
+      tags: [System]
+      summary: Health check
+      operationId: healthCheck
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /ready:
+    get:
+      tags: [System]
+      summary: Readiness check
+      description: Pings the database to verify the service is ready to accept requests.
+      operationId: readinessCheck
+      responses:
+        "200":
+          description: Service is ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ready
+        "503":
+          description: Service is not ready (database unavailable)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: not ready
+                  error:
+                    type: string
+
+  /api/v1/invoices:
+    post:
+      tags: [Invoices]
+      summary: Create invoice
+      description: |
+        Creates a new invoice with line items in `draft` status.
+        The invoice is stored locally but NOT yet sent to Viettel SInvoice.
+        Use `POST /:id/submit` to submit the draft.
+
+        **Validation rules:**
+        - `token_currency` must be `VND` or `HBAR`
+        - When `token_currency` is `HBAR`, `exchange_rate` is required and must be > 0
+        - At least one item is required
+      operationId: createInvoice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInvoiceRequest"
+      responses:
+        "201":
+          description: Invoice created successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/APIResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Invoice"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    get:
+      tags: [Invoices]
+      summary: List invoices
+      description: Returns a paginated list of invoices with optional filters.
+      operationId: listInvoices
+      parameters:
+        - name: status
+          in: query
+          description: Filter by invoice status
+          schema:
+            $ref: "#/components/schemas/InvoiceStatus"
+        - name: from
+          in: query
+          description: Filter invoices created after this date (RFC 3339)
+          schema:
+            type: string
+            format: date-time
+            example: "2025-01-01T00:00:00Z"
+        - name: to
+          in: query
+          description: Filter invoices created before this date (RFC 3339)
+          schema:
+            type: string
+            format: date-time
+            example: "2025-12-31T23:59:59Z"
+        - name: limit
+          in: query
+          description: Maximum number of results
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+        - name: offset
+          in: query
+          description: Number of results to skip
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+      responses:
+        "200":
+          description: List of invoices
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/APIResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Invoice"
+                      meta:
+                        $ref: "#/components/schemas/Meta"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/invoices/{id}:
+    get:
+      tags: [Invoices]
+      summary: Get invoice by ID
+      description: Returns a single invoice with all its line items.
+      operationId: getInvoice
+      parameters:
+        - $ref: "#/components/parameters/InvoiceId"
+      responses:
+        "200":
+          description: Invoice found
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/APIResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Invoice"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    delete:
+      tags: [Invoices]
+      summary: Cancel invoice
+      description: |
+        Cancels an invoice. Only invoices that are NOT in `completed` status can be cancelled.
+        An optional reason can be provided in the request body.
+      operationId: cancelInvoice
+      parameters:
+        - $ref: "#/components/parameters/InvoiceId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CancelInvoiceRequest"
+      responses:
+        "200":
+          description: Invoice cancelled
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/APIResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          status:
+                            type: string
+                            example: cancelled
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "422":
+          $ref: "#/components/responses/InvalidTransitionError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/invoices/{id}/submit:
+    post:
+      tags: [Invoices]
+      summary: Submit invoice
+      description: |
+        Transitions a `draft` (or `failed`) invoice to `submitted` status
+        and enqueues it for asynchronous publishing to Viettel SInvoice.
+
+        The invoice will be processed in the background:
+        `submitted → processing → completed` (or `failed` on error).
+      operationId: submitInvoice
+      parameters:
+        - $ref: "#/components/parameters/InvoiceId"
+      responses:
+        "200":
+          description: Invoice submitted for processing
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/APIResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          status:
+                            type: string
+                            example: submitted
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "422":
+          $ref: "#/components/responses/InvalidTransitionError"
+        "503":
+          description: Job queue is full
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+              example:
+                success: false
+                error:
+                  code: QUEUE_FULL
+                  message: "job queue is full, try again later"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/invoices/{id}/payment:
+    patch:
+      tags: [Payment]
+      summary: Update payment transaction hash
+      description: |
+        Saves the blockchain transaction hash for an invoice after payment is completed.
+        This links the invoice to the on-chain payment record.
+      operationId: updatePayment
+      parameters:
+        - $ref: "#/components/parameters/InvoiceId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePaymentRequest"
+      responses:
+        "200":
+          description: Transaction hash saved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/APIResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          transaction_hash:
+                            type: string
+                            example: "0x1234abcd..."
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/invoices/{id}/status:
+    get:
+      tags: [Invoices]
+      summary: Get invoice status
+      description: Returns only the current status of an invoice (lightweight endpoint).
+      operationId: getInvoiceStatus
+      parameters:
+        - $ref: "#/components/parameters/InvoiceId"
+      responses:
+        "200":
+          description: Current invoice status
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/APIResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                            format: uuid
+                          status:
+                            $ref: "#/components/schemas/InvoiceStatus"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/invoices/{id}/history:
+    get:
+      tags: [Invoices]
+      summary: Get invoice status history
+      description: Returns the full status transition history for an invoice.
+      operationId: getInvoiceHistory
+      parameters:
+        - $ref: "#/components/parameters/InvoiceId"
+      responses:
+        "200":
+          description: Status transition history
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/APIResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/InvoiceStatusHistory"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/invoices/{id}/pdf:
+    get:
+      tags: [Invoices]
+      summary: Download invoice PDF
+      description: |
+        Downloads the invoice PDF from Viettel SInvoice and returns it as a base64-encoded data URL.
+        The invoice must be in `completed` status.
+      operationId: downloadInvoicePDF
+      parameters:
+        - $ref: "#/components/parameters/InvoiceId"
+      responses:
+        "200":
+          description: PDF data URL
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/APIResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          url:
+                            type: string
+                            description: Base64-encoded PDF data URL
+                            example: "data:application/pdf;base64,JVBERi0..."
+                          filename:
+                            type: string
+                            description: Suggested filename
+                            example: "invoice_C25TAA-0001.pdf"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "502":
+          description: Viettel SInvoice API error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+              example:
+                success: false
+                error:
+                  code: THIRD_PARTY_ERROR
+                  message: "failed to download invoice file"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/invoices/report-to-authority:
+    post:
+      tags: [Tax Authority]
+      summary: Report invoices to tax authority
+      description: |
+        Sends invoices to the tax authority (CQT) via Viettel SInvoice.
+        Requires a transaction UUID and date range identifying the invoice batch.
+      operationId: reportToAuthority
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReportToAuthorityRequest"
+      responses:
+        "200":
+          description: Report result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/APIResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          success_count:
+                            type: integer
+                            description: Number of invoices successfully reported
+                            example: 10
+                          error_count:
+                            type: integer
+                            description: Number of invoices that failed to report
+                            example: 0
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "502":
+          description: Viettel SInvoice API error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+              example:
+                success: false
+                error:
+                  code: THIRD_PARTY_ERROR
+                  message: "failed to report to tax authority"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+components:
+  parameters:
+    InvoiceId:
+      name: id
+      in: path
+      required: true
+      description: Invoice UUID
+      schema:
+        type: string
+        format: uuid
+        example: "550e8400-e29b-41d4-a716-446655440000"
+
+  schemas:
+    InvoiceStatus:
+      type: string
+      enum: [draft, submitted, processing, completed, failed, cancelled]
+      description: |
+        Invoice lifecycle status:
+        - `draft` — Created locally, not yet submitted
+        - `submitted` — Enqueued for Viettel SInvoice publishing
+        - `processing` — Being processed by Viettel
+        - `completed` — Successfully published and confirmed
+        - `failed` — Publishing failed (can be retried via submit)
+        - `cancelled` — Cancelled by user
+
+    CreateInvoiceRequest:
+      type: object
+      required:
+        - buyer_name
+        - currency
+        - total_amount_with_tax
+        - total_amount_without_tax
+        - token_currency
+        - items
+      properties:
+        buyer_name:
+          type: string
+          maxLength: 400
+          description: Buyer display name
+          example: "Nguyen Van A"
+        buyer_legal_name:
+          type: string
+          maxLength: 400
+          description: Buyer legal/company name
+          example: "Cong ty TNHH ABC"
+        buyer_tax_code:
+          type: string
+          maxLength: 20
+          description: Buyer tax identification number
+          example: "0123456789"
+        buyer_address:
+          type: string
+          maxLength: 1200
+          example: "123 Le Loi, Quan 1, TP.HCM"
+        buyer_email:
+          type: string
+          maxLength: 2000
+          example: "buyer@example.com"
+        buyer_phone:
+          type: string
+          maxLength: 15
+          example: "0901234567"
+        buyer_code:
+          type: string
+          maxLength: 400
+          description: Internal buyer code
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+          description: ISO 4217 currency code (VND amounts sent to tax authority)
+          example: "VND"
+        total_amount_with_tax:
+          type: number
+          format: double
+          description: Total amount including tax (VND)
+          example: 1100000
+        total_tax_amount:
+          type: number
+          format: double
+          description: Total tax amount (VND)
+          example: 100000
+        total_amount_without_tax:
+          type: number
+          format: double
+          description: Total amount excluding tax (VND)
+          example: 1000000
+        token_currency:
+          type: string
+          maxLength: 10
+          description: Token currency type — must be `VND` or `HBAR`
+          enum: [VND, HBAR]
+          example: "HBAR"
+        exchange_rate:
+          type: number
+          format: double
+          nullable: true
+          description: Exchange rate from token to VND. Required when `token_currency` is `HBAR`.
+          example: 5000.0
+        exchange_rate_source:
+          type: string
+          maxLength: 100
+          description: Source of the exchange rate
+          example: "CoinGecko"
+        hbar_amount:
+          type: number
+          format: double
+          description: Amount in HBAR
+          example: 220.0
+        token_total_amount:
+          type: number
+          format: double
+          description: Total amount in token currency
+          example: 220.0
+        token_tax_amount:
+          type: number
+          format: double
+          description: Tax amount in token currency
+          example: 20.0
+        token_net_amount:
+          type: number
+          format: double
+          description: Net amount in token currency
+          example: 200.0
+        payment_method:
+          type: string
+          maxLength: 50
+          example: "TM/CK"
+        transaction_hash:
+          type: string
+          maxLength: 255
+          description: Blockchain transaction hash (can also be set later via PATCH)
+          example: "0x1234abcd..."
+        erp_order_id:
+          type: string
+          maxLength: 255
+          description: External ERP order reference ID
+        notes:
+          type: string
+          maxLength: 500
+        issued_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Invoice issue date (RFC 3339). Defaults to server time if not provided.
+          example: "2025-06-15T10:00:00Z"
+        items:
+          type: array
+          minItems: 1
+          description: Invoice line items
+          items:
+            $ref: "#/components/schemas/ItemRequest"
+
+    ItemRequest:
+      type: object
+      required:
+        - item_name
+        - quantity
+        - unit_price
+        - item_total_amount_without_tax
+      properties:
+        item_name:
+          type: string
+          maxLength: 500
+          example: "Dich vu tu van"
+        quantity:
+          type: number
+          format: double
+          example: 2
+        unit_price:
+          type: number
+          format: double
+          description: Unit price in VND
+          example: 500000
+        tax_percentage:
+          type: number
+          format: double
+          minimum: -2
+          maximum: 100
+          description: Tax rate percentage. Use -2 for non-taxable, -1 for tax-exempt, 0-100 for rate.
+          example: 10
+        tax_amount:
+          type: number
+          format: double
+          description: Tax amount in VND
+          example: 100000
+        item_total_amount_without_tax:
+          type: number
+          format: double
+          description: Line total before tax (VND)
+          example: 1000000
+        item_total_amount_with_tax:
+          type: number
+          format: double
+          description: Line total after tax (VND)
+          example: 1100000
+        item_total_amount_after_discount:
+          type: number
+          format: double
+          nullable: true
+        item_discount:
+          type: number
+          format: double
+          nullable: true
+        token_unit_price:
+          type: number
+          format: double
+          description: Unit price in token currency
+        token_tax_amount:
+          type: number
+          format: double
+          description: Tax amount in token currency
+        token_line_total:
+          type: number
+          format: double
+          description: Line total in token currency
+        line_number:
+          type: integer
+          description: Display ordering of line items
+        selection:
+          type: integer
+          minimum: 1
+          maximum: 6
+          nullable: true
+          description: |
+            Viettel item selection type:
+            1=goods, 2=note, 3=discount, 4=table/fee, 5=promo, 6=special (ND70)
+        item_type:
+          type: integer
+          minimum: 1
+          maximum: 6
+          nullable: true
+          description: Required when selection=6 (ND70 special goods)
+        item_code:
+          type: string
+          maxLength: 50
+        unit_code:
+          type: string
+          maxLength: 100
+        unit_name:
+          type: string
+          maxLength: 300
+          example: "goi"
+        discount:
+          type: number
+          format: double
+          minimum: 0
+          description: Discount percentage on unit price
+          default: 0
+        discount2:
+          type: number
+          format: double
+          minimum: 0
+          description: Second discount percentage
+          default: 0
+        item_note:
+          type: string
+          maxLength: 300
+        is_increase_item:
+          type: boolean
+          nullable: true
+          description: "null=normal, false=decrease adjustment, true=increase adjustment"
+        batch_no:
+          type: string
+          maxLength: 300
+        exp_date:
+          type: string
+          maxLength: 50
+        adjust_ratio:
+          type: string
+          enum: ["1", "2", "3", "5"]
+          description: Adjustment ratio code
+        unit_price_with_tax:
+          type: number
+          format: double
+          nullable: true
+        special_info:
+          type: array
+          description: ND70 special goods attributes (key-value pairs)
+          items:
+            $ref: "#/components/schemas/SpecialInfoItem"
+
+    SpecialInfoItem:
+      type: object
+      required: [name, value]
+      properties:
+        name:
+          type: string
+          example: "bat_dau_dieu_chinh"
+        value:
+          type: string
+          example: "01/2025"
+
+    UpdatePaymentRequest:
+      type: object
+      required: [transaction_hash]
+      properties:
+        transaction_hash:
+          type: string
+          maxLength: 255
+          description: Blockchain transaction hash
+          example: "0x1234abcdef5678..."
+
+    CancelInvoiceRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          description: Optional cancellation reason
+          example: "Customer requested cancellation"
+
+    ReportToAuthorityRequest:
+      type: object
+      required: [transaction_uuid, start_date, end_date]
+      properties:
+        transaction_uuid:
+          type: string
+          description: Viettel transaction UUID identifying the invoice batch
+          example: "AB123-XYZ"
+        start_date:
+          type: string
+          description: Start date of the invoice batch
+          example: "01/06/2025"
+        end_date:
+          type: string
+          description: End date of the invoice batch
+          example: "30/06/2025"
+
+    Invoice:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        external_id:
+          type: string
+          nullable: true
+          description: Viettel SInvoice external ID (assigned after publishing)
+        transaction_uuid:
+          type: string
+          nullable: true
+          description: Viettel transaction UUID
+        status:
+          $ref: "#/components/schemas/InvoiceStatus"
+        buyer_name:
+          type: string
+        buyer_legal_name:
+          type: string
+        buyer_tax_code:
+          type: string
+        buyer_address:
+          type: string
+        buyer_email:
+          type: string
+        buyer_phone:
+          type: string
+        buyer_code:
+          type: string
+        currency:
+          type: string
+          example: "VND"
+        total_amount_with_tax:
+          type: number
+          format: double
+        total_tax_amount:
+          type: number
+          format: double
+        total_amount_without_tax:
+          type: number
+          format: double
+        token_currency:
+          type: string
+        exchange_rate:
+          type: number
+          format: double
+        exchange_rate_source:
+          type: string
+        hbar_amount:
+          type: number
+          format: double
+        token_total_amount:
+          type: number
+          format: double
+        token_tax_amount:
+          type: number
+          format: double
+        token_net_amount:
+          type: number
+          format: double
+        payment_method:
+          type: string
+        transaction_hash:
+          type: string
+        erp_order_id:
+          type: string
+        notes:
+          type: string
+        issued_at:
+          type: string
+          format: date-time
+          nullable: true
+        submitted_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        retry_count:
+          type: integer
+        last_error:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvoiceItem"
+
+    InvoiceItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        invoice_id:
+          type: string
+          format: uuid
+        item_name:
+          type: string
+        quantity:
+          type: number
+          format: double
+        unit_price:
+          type: number
+          format: double
+        tax_percentage:
+          type: number
+          format: double
+        tax_amount:
+          type: number
+          format: double
+        item_total_amount_without_tax:
+          type: number
+          format: double
+        item_total_amount_with_tax:
+          type: number
+          format: double
+        item_total_amount_after_discount:
+          type: number
+          format: double
+          nullable: true
+        item_discount:
+          type: number
+          format: double
+          nullable: true
+        token_unit_price:
+          type: number
+          format: double
+        token_tax_amount:
+          type: number
+          format: double
+        token_line_total:
+          type: number
+          format: double
+        line_number:
+          type: integer
+        selection:
+          type: integer
+          nullable: true
+        item_type:
+          type: integer
+          nullable: true
+        item_code:
+          type: string
+        unit_code:
+          type: string
+        unit_name:
+          type: string
+        discount:
+          type: number
+          format: double
+        discount2:
+          type: number
+          format: double
+        item_note:
+          type: string
+        is_increase_item:
+          type: boolean
+          nullable: true
+        batch_no:
+          type: string
+        exp_date:
+          type: string
+        adjust_ratio:
+          type: string
+        unit_price_with_tax:
+          type: number
+          format: double
+          nullable: true
+        special_info:
+          type: array
+          items:
+            $ref: "#/components/schemas/SpecialInfoItem"
+        created_at:
+          type: string
+          format: date-time
+
+    InvoiceStatusHistory:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        invoice_id:
+          type: string
+          format: uuid
+        from_status:
+          type: string
+        to_status:
+          type: string
+        reason:
+          type: string
+        changed_by:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    APIResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          description: Response payload (present on success)
+        error:
+          $ref: "#/components/schemas/APIError"
+        meta:
+          $ref: "#/components/schemas/Meta"
+
+    APIError:
+      type: object
+      properties:
+        code:
+          type: string
+          description: |
+            Error codes:
+            - `VALIDATION_ERROR` — Invalid request data (400)
+            - `NOT_FOUND` — Resource not found (404)
+            - `CONFLICT` — Duplicate or conflicting state (409)
+            - `INVALID_STATUS_TRANSITION` — Invalid lifecycle transition (422)
+            - `THIRD_PARTY_ERROR` — Viettel API failure (502)
+            - `TIMEOUT` — Operation timed out (504)
+            - `QUEUE_FULL` — Background job queue at capacity (503)
+            - `INTERNAL_ERROR` — Unexpected server error (500)
+          example: VALIDATION_ERROR
+        message:
+          type: string
+          example: "buyer_name is required"
+
+    ErrorBody:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          $ref: "#/components/schemas/APIError"
+
+    Meta:
+      type: object
+      properties:
+        total:
+          type: integer
+          format: int64
+          description: Total number of matching records
+          example: 42
+        limit:
+          type: integer
+          example: 20
+        offset:
+          type: integer
+          example: 0
+
+  responses:
+    ValidationError:
+      description: Invalid request data
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+          example:
+            success: false
+            error:
+              code: VALIDATION_ERROR
+              message: "buyer_name is required"
+
+    NotFoundError:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+          example:
+            success: false
+            error:
+              code: NOT_FOUND
+              message: "invoice not found"
+
+    InvalidTransitionError:
+      description: Invalid status transition
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+          example:
+            success: false
+            error:
+              code: INVALID_STATUS_TRANSITION
+              message: "cannot transition from completed to submitted"
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+          example:
+            success: false
+            error:
+              code: INTERNAL_ERROR
+              message: "an unexpected error occurred"
