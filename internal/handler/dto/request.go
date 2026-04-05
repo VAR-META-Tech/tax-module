@@ -78,10 +78,6 @@ type UpdatePaymentRequest struct {
 	TransactionHash string `json:"transaction_hash" binding:"required,max=255"`
 }
 
-type CancelInvoiceRequest struct {
-	Reason string `json:"reason"`
-}
-
 // SpecialInfoItem represents a special goods attribute per ND70.
 type SpecialInfoItem struct {
 	Name  string `json:"name" binding:"required"`

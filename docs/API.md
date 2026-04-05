@@ -27,8 +27,6 @@ draft ──► submitted ──► processing ──► completed
                             │
                             ▼
                           failed ──► submitted  (retry via POST /:id/submit)
-
-Any non-completed status ──► cancelled
 ```
 
 | Status | Description |
@@ -38,7 +36,6 @@ Any non-completed status ──► cancelled
 | `processing` | Being processed by Viettel SInvoice |
 | `completed` | Successfully published and confirmed |
 | `failed` | Publishing failed; eligible for retry |
-| `cancelled` | Cancelled by request |
 
 ---
 
@@ -297,7 +294,7 @@ Returns a paginated list of invoices with optional filters.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| `status` | string | — | Filter by status: `draft`, `submitted`, `processing`, `completed`, `failed`, `cancelled` |
+| `status` | string | — | Filter by status: `draft`, `submitted`, `processing`, `completed`, `failed` |
 | `from` | string (RFC 3339) | — | Created after this datetime, e.g. `2025-01-01T00:00:00Z` |
 | `to` | string (RFC 3339) | — | Created before this datetime |
 | `limit` | integer | `20` | Max results per page |
@@ -373,42 +370,6 @@ Returns a single invoice with all line items.
 |---|---|---|
 | 400 | `VALIDATION_ERROR` | `id` is not a valid UUID |
 | 404 | `NOT_FOUND` | Invoice does not exist |
-
----
-
-#### `DELETE /api/v1/invoices/:id`
-
-Cancels an invoice. Any status except `completed` can be cancelled.
-
-**Path Parameters**
-
-| Parameter | Type | Description |
-|---|---|---|
-| `id` | UUID | Invoice ID |
-
-**Request Body** _(optional)_
-
-```json
-{
-  "reason": "Customer requested cancellation"
-}
-```
-
-**Response 200**
-
-```json
-{
-  "success": true,
-  "data": { "status": "cancelled" }
-}
-```
-
-**Error Responses**
-
-| Status | Code | When |
-|---|---|---|
-| 404 | `NOT_FOUND` | Invoice does not exist |
-| 422 | `INVALID_STATUS_TRANSITION` | Invoice is already `completed` |
 
 ---
 
