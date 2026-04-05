@@ -24,8 +24,8 @@ All APIs are internal-only — no authentication is required.
 
 ```
 draft ──► submitted ──► processing ──► completed
-                            │
-                            ▼
+                            │               ▲
+                            ▼               │ (poller sets external_id=invoiceNo)
                           failed ──► submitted  (retry via POST /:id/submit)
 ```
 
@@ -33,9 +33,18 @@ draft ──► submitted ──► processing ──► completed
 |---|---|
 | `draft` | Created locally; not yet sent to Viettel |
 | `submitted` | Enqueued for background publishing |
-| `processing` | Being processed by Viettel SInvoice |
-| `completed` | Successfully published and confirmed |
+| `processing` | Sent to Viettel; awaiting `invoiceNo` confirmation |
+| `completed` | `invoiceNo` confirmed; `external_id` populated |
 | `failed` | Publishing failed; eligible for retry |
+
+**`external_id` vs `transaction_uuid`**
+
+| Field | Set when | Used for |
+|---|---|---|
+| `transaction_uuid` | Invoice creation (always set) | Polling Viettel status, reporting to CQT |
+| `external_id` | When Viettel confirms `invoiceNo` | Downloading PDF |
+
+While an invoice is `processing`, `external_id` is null — the background poller calls Viettel using `transaction_uuid` until `invoiceNo` is returned.
 
 ---
 
@@ -166,7 +175,6 @@ Creates a new invoice in `draft` status. The invoice is stored locally and is **
   "token_currency": "HBAR",
   "exchange_rate": 5000.0,
   "exchange_rate_source": "CoinGecko",
-  "hbar_amount": 220.0,
   "token_total_amount": 220.0,
   "token_tax_amount": 20.0,
   "token_net_amount": 200.0,
@@ -214,7 +222,6 @@ Creates a new invoice in `draft` status. The invoice is stored locally and is **
 | `token_currency` | string | Yes | `VND` or `HBAR` | Token used for payment |
 | `exchange_rate` | float | Conditional | > 0 | Required when `token_currency` is `HBAR` |
 | `exchange_rate_source` | string | No | max 100 | Source of the exchange rate |
-| `hbar_amount` | float | No | | Amount in HBAR |
 | `token_total_amount` | float | No | | Total in token currency |
 | `token_tax_amount` | float | No | | Tax in token currency |
 | `token_net_amount` | float | No | | Net amount in token currency |

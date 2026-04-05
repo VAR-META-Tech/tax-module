@@ -171,37 +171,45 @@ func (p *Pool) handlePublish(ctx context.Context, invoiceID uuid.UUID, log *zero
 	}
 	invoice.Items = items
 
-	externalID, err := p.publisher.CreateInvoice(ctx, invoice)
+	invoiceNo, err := p.publisher.CreateInvoice(ctx, invoice)
 	if err != nil {
 		p.handlePublishError(ctx, invoice, err, log)
 		return
 	}
 
-	invoice.ExternalID = &externalID
-	now := time.Now()
-	invoice.CompletedAt = &now
-	invoice.UpdatedAt = now
-	if err := p.repo.Update(ctx, invoice); err != nil {
-		log.Error().Err(err).Msg("Failed to update invoice with external ID")
+	// Viettel confirmed immediately with an invoiceNo — mark completed.
+	// If invoiceNo is empty, Viettel is processing async — stay in processing,
+	// the poller will poll via QueryStatus(transactionUuid) until invoiceNo arrives.
+	if invoiceNo != "" {
+		invoice.ExternalID = &invoiceNo
+		now := time.Now()
+		invoice.CompletedAt = &now
+		invoice.UpdatedAt = now
+		if err := p.repo.Update(ctx, invoice); err != nil {
+			log.Error().Err(err).Msg("Failed to update invoice with invoiceNo")
+			return
+		}
+
+		if err := p.repo.UpdateStatus(ctx, invoiceID, domain.StatusCompleted, "published to viettel"); err != nil {
+			log.Error().Err(err).Msg("Failed to transition to completed")
+			return
+		}
+
+		_ = p.repo.AddStatusHistory(ctx, &domain.InvoiceStatusHistory{
+			ID:         uuid.New(),
+			InvoiceID:  invoiceID,
+			FromStatus: string(domain.StatusProcessing),
+			ToStatus:   string(domain.StatusCompleted),
+			Reason:     "published to viettel, invoiceNo=" + invoiceNo,
+			ChangedBy:  "worker",
+			CreatedAt:  now,
+		})
+
+		log.Info().Str("invoice_no", invoiceNo).Msg("Invoice published successfully")
 		return
 	}
 
-	if err := p.repo.UpdateStatus(ctx, invoiceID, domain.StatusCompleted, "published to viettel"); err != nil {
-		log.Error().Err(err).Msg("Failed to transition to completed")
-		return
-	}
-
-	_ = p.repo.AddStatusHistory(ctx, &domain.InvoiceStatusHistory{
-		ID:         uuid.New(),
-		InvoiceID:  invoiceID,
-		FromStatus: string(domain.StatusProcessing),
-		ToStatus:   string(domain.StatusCompleted),
-		Reason:     "published to viettel, externalID=" + externalID,
-		ChangedBy:  "worker",
-		CreatedAt:  now,
-	})
-
-	log.Info().Str("external_id", externalID).Msg("Invoice published successfully")
+	log.Info().Msg("Invoice submitted to Viettel (async — awaiting invoiceNo via poll)")
 }
 
 func (p *Pool) handlePublishError(ctx context.Context, invoice *domain.Invoice, publishErr error, log *zerolog.Logger) {
@@ -232,7 +240,7 @@ func (p *Pool) handlePublishError(ctx context.Context, invoice *domain.Invoice, 
 	log.Warn().Int("retry_count", invoice.RetryCount).Err(publishErr).Msg("Invoice publish failed, will retry")
 }
 
-// handlePoll checks a processing invoice's status via Viettel.
+// handlePoll checks a processing invoice's status via Viettel using transactionUuid.
 func (p *Pool) handlePoll(ctx context.Context, invoiceID uuid.UUID, log *zerolog.Logger) {
 	invoice, err := p.repo.GetByID(ctx, invoiceID)
 	if err != nil {
@@ -240,12 +248,12 @@ func (p *Pool) handlePoll(ctx context.Context, invoiceID uuid.UUID, log *zerolog
 		return
 	}
 
-	if invoice.ExternalID == nil || *invoice.ExternalID == "" {
-		log.Warn().Msg("Invoice has no external ID, skipping poll")
+	if invoice.TransactionUuid == nil || *invoice.TransactionUuid == "" {
+		log.Warn().Msg("Invoice has no transactionUuid, skipping poll")
 		return
 	}
 
-	status, rawResponse, err := p.publisher.QueryStatus(ctx, *invoice.ExternalID)
+	status, invoiceNo, rawResponse, err := p.publisher.QueryStatus(ctx, *invoice.TransactionUuid)
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to query invoice status")
 		return
@@ -256,11 +264,12 @@ func (p *Pool) handlePoll(ctx context.Context, invoiceID uuid.UUID, log *zerolog
 	switch status {
 	case "completed":
 		now := time.Now()
+		invoice.ExternalID = &invoiceNo
 		invoice.CompletedAt = &now
 		invoice.Metadata = rawResponse
 		invoice.UpdatedAt = now
 		_ = p.repo.Update(ctx, invoice)
-		_ = p.repo.UpdateStatus(ctx, invoiceID, domain.StatusCompleted, "viettel confirmed")
+		_ = p.repo.UpdateStatus(ctx, invoiceID, domain.StatusCompleted, "viettel confirmed, invoiceNo="+invoiceNo)
 	case "pending", "processing":
 		invoice.Metadata = rawResponse
 		invoice.UpdatedAt = time.Now()
@@ -293,8 +302,10 @@ func (p *Pool) pollPendingInvoices(ctx context.Context) {
 	}
 
 	for _, inv := range invoices {
+		// submitted → still needs to be published
+		// processing → already sent to Viettel, poll for invoiceNo
 		jobType := JobPublishInvoice
-		if inv.ExternalID != nil && *inv.ExternalID != "" {
+		if inv.Status == domain.StatusProcessing {
 			jobType = JobPollStatus
 		}
 

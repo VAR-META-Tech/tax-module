@@ -58,27 +58,26 @@ func (p *ViettelPublisher) CreateInvoice(ctx context.Context, invoice *domain.In
 		return "", domain.NewThirdPartyError("viettel createInvoice error: "+desc, nil)
 	}
 
-	externalID := transactionUuid
 	if resp.Result != nil && resp.Result.InvoiceNo != "" {
-		externalID = resp.Result.InvoiceNo
 		p.log.Info().
 			Str("invoice_no", resp.Result.InvoiceNo).
 			Str("transaction_uuid", transactionUuid).
 			Msg("Viettel invoice created with invoiceNo")
-	} else {
-		p.log.Info().
-			Str("transaction_uuid", transactionUuid).
-			Msg("Viettel invoice created (invoiceNo pending — async)")
+		return resp.Result.InvoiceNo, nil
 	}
 
-	return externalID, nil
+	p.log.Info().
+		Str("transaction_uuid", transactionUuid).
+		Msg("Viettel invoice created (invoiceNo pending — async)")
+	return "", nil
 }
 
 // QueryStatus checks invoice status via searchByTransactionUuid.
-func (p *ViettelPublisher) QueryStatus(ctx context.Context, externalID string) (string, []byte, error) {
-	resp, err := p.client.SearchByTransactionUuid(ctx, externalID, p.cfg.SupplierCode)
+// Returns status, invoiceNo (empty if not yet assigned), raw response.
+func (p *ViettelPublisher) QueryStatus(ctx context.Context, transactionUuid string) (string, string, []byte, error) {
+	resp, err := p.client.SearchByTransactionUuid(ctx, transactionUuid, p.cfg.SupplierCode)
 	if err != nil {
-		return "", nil, err
+		return "", "", nil, err
 	}
 
 	rawResponse, _ := json.Marshal(resp)
@@ -88,19 +87,19 @@ func (p *ViettelPublisher) QueryStatus(ctx context.Context, externalID string) (
 		if resp.Description != nil {
 			desc = *resp.Description
 		}
-		return "", rawResponse, domain.NewThirdPartyError("viettel query error: "+desc, nil)
+		return "", "", rawResponse, domain.NewThirdPartyError("viettel query error: "+desc, nil)
 	}
 
 	if len(resp.Result) == 0 {
-		return "pending", rawResponse, nil
+		return "pending", "", rawResponse, nil
 	}
 
 	result := resp.Result[0]
 	if result.InvoiceNo != "" {
-		return "completed", rawResponse, nil
+		return "completed", result.InvoiceNo, rawResponse, nil
 	}
 
-	return "processing", rawResponse, nil
+	return "processing", "", rawResponse, nil
 }
 
 // ReportToAuthority sends a completed invoice to the tax authority (CQT) via Viettel (§7.36).

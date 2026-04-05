@@ -14,7 +14,10 @@ info:
               failed ──→ submitted (retry)
     ```
 
-    Invoices cannot be cancelled once created.
+    When Viettel returns `invoiceNo` synchronously the invoice moves straight to `completed`.
+    When Viettel processes asynchronously the invoice stays `processing` until the background
+    poller calls `QueryStatus` (using `transaction_uuid`) and receives the `invoiceNo`.
+    `external_id` is only set once `invoiceNo` is confirmed by Viettel.
 
     ## Authentication
 
@@ -563,11 +566,6 @@ components:
           maxLength: 100
           description: Source of the exchange rate
           example: "CoinGecko"
-        hbar_amount:
-          type: number
-          format: double
-          description: Amount in HBAR
-          example: 220.0
         token_total_amount:
           type: number
           format: double
@@ -788,11 +786,17 @@ components:
         external_id:
           type: string
           nullable: true
-          description: Viettel SInvoice external ID (assigned after publishing)
+          description: |
+            Viettel `invoiceNo` assigned after Viettel confirms the invoice.
+            Null while the invoice is in `processing` status (Viettel async).
+            Required for PDF download.
         transaction_uuid:
           type: string
           nullable: true
-          description: Viettel transaction UUID
+          description: |
+            UUID sent to Viettel when creating the invoice. Used internally
+            to poll Viettel status (`QueryStatus`) until `invoiceNo` is returned.
+            Set at invoice creation and never changes.
         status:
           $ref: "#/components/schemas/InvoiceStatus"
         buyer_name:
@@ -828,9 +832,6 @@ components:
           format: double
         exchange_rate_source:
           type: string
-        hbar_amount:
-          type: number
-          format: double
         token_total_amount:
           type: number
           format: double

@@ -20,8 +20,8 @@ func (m *mockPublisher) CreateInvoice(_ context.Context, _ *domain.Invoice) (str
 	return "", nil
 }
 
-func (m *mockPublisher) QueryStatus(_ context.Context, _ string) (string, []byte, error) {
-	return "", nil, nil
+func (m *mockPublisher) QueryStatus(_ context.Context, _ string) (string, string, []byte, error) {
+	return "", "", nil, nil
 }
 
 func (m *mockPublisher) ReportToAuthority(ctx context.Context, transactionUuid, startDate, endDate string) (int, int, error) {

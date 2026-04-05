@@ -61,7 +61,6 @@ func (h *InvoiceHandler) CreateInvoice(c *gin.Context) {
 		TokenCurrency:         req.TokenCurrency,
 		ExchangeRate:          exchangeRate,
 		ExchangeRateSource:    req.ExchangeRateSource,
-		HbarAmount:            req.HbarAmount,
 		TokenTotalAmount:      req.TokenTotalAmount,
 		TokenTaxAmount:        req.TokenTaxAmount,
 		TokenNetAmount:        req.TokenNetAmount,
