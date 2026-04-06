@@ -22,7 +22,6 @@ type CreateInvoiceRequest struct {
 	TokenCurrency      string   `json:"token_currency" binding:"required,max=10"`
 	ExchangeRate       *float64 `json:"exchange_rate"`
 	ExchangeRateSource string   `json:"exchange_rate_source" binding:"max=100"`
-	HbarAmount         float64  `json:"hbar_amount"`
 	TokenTotalAmount   float64  `json:"token_total_amount"`
 	TokenTaxAmount     float64  `json:"token_tax_amount"`
 	TokenNetAmount     float64  `json:"token_net_amount"`
@@ -76,10 +75,6 @@ type ItemRequest struct {
 
 type UpdatePaymentRequest struct {
 	TransactionHash string `json:"transaction_hash" binding:"required,max=255"`
-}
-
-type CancelInvoiceRequest struct {
-	Reason string `json:"reason"`
 }
 
 // SpecialInfoItem represents a special goods attribute per ND70.

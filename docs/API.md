@@ -24,21 +24,27 @@ All APIs are internal-only — no authentication is required.
 
 ```
 draft ──► submitted ──► processing ──► completed
-                            │
-                            ▼
+                            │               ▲
+                            ▼               │ (poller sets external_id=invoiceNo)
                           failed ──► submitted  (retry via POST /:id/submit)
-
-Any non-completed status ──► cancelled
 ```
 
 | Status | Description |
 |---|---|
 | `draft` | Created locally; not yet sent to Viettel |
 | `submitted` | Enqueued for background publishing |
-| `processing` | Being processed by Viettel SInvoice |
-| `completed` | Successfully published and confirmed |
+| `processing` | Sent to Viettel; awaiting `invoiceNo` confirmation |
+| `completed` | `invoiceNo` confirmed; `external_id` populated |
 | `failed` | Publishing failed; eligible for retry |
-| `cancelled` | Cancelled by request |
+
+**`external_id` vs `transaction_uuid`**
+
+| Field | Set when | Used for |
+|---|---|---|
+| `transaction_uuid` | Invoice creation (always set) | Polling Viettel status, reporting to CQT |
+| `external_id` | When Viettel confirms `invoiceNo` | Downloading PDF |
+
+While an invoice is `processing`, `external_id` is null — the background poller calls Viettel using `transaction_uuid` until `invoiceNo` is returned.
 
 ---
 
@@ -169,7 +175,6 @@ Creates a new invoice in `draft` status. The invoice is stored locally and is **
   "token_currency": "HBAR",
   "exchange_rate": 5000.0,
   "exchange_rate_source": "CoinGecko",
-  "hbar_amount": 220.0,
   "token_total_amount": 220.0,
   "token_tax_amount": 20.0,
   "token_net_amount": 200.0,
@@ -217,7 +222,6 @@ Creates a new invoice in `draft` status. The invoice is stored locally and is **
 | `token_currency` | string | Yes | `VND` or `HBAR` | Token used for payment |
 | `exchange_rate` | float | Conditional | > 0 | Required when `token_currency` is `HBAR` |
 | `exchange_rate_source` | string | No | max 100 | Source of the exchange rate |
-| `hbar_amount` | float | No | | Amount in HBAR |
 | `token_total_amount` | float | No | | Total in token currency |
 | `token_tax_amount` | float | No | | Tax in token currency |
 | `token_net_amount` | float | No | | Net amount in token currency |
@@ -297,7 +301,7 @@ Returns a paginated list of invoices with optional filters.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| `status` | string | — | Filter by status: `draft`, `submitted`, `processing`, `completed`, `failed`, `cancelled` |
+| `status` | string | — | Filter by status: `draft`, `submitted`, `processing`, `completed`, `failed` |
 | `from` | string (RFC 3339) | — | Created after this datetime, e.g. `2025-01-01T00:00:00Z` |
 | `to` | string (RFC 3339) | — | Created before this datetime |
 | `limit` | integer | `20` | Max results per page |
@@ -373,42 +377,6 @@ Returns a single invoice with all line items.
 |---|---|---|
 | 400 | `VALIDATION_ERROR` | `id` is not a valid UUID |
 | 404 | `NOT_FOUND` | Invoice does not exist |
-
----
-
-#### `DELETE /api/v1/invoices/:id`
-
-Cancels an invoice. Any status except `completed` can be cancelled.
-
-**Path Parameters**
-
-| Parameter | Type | Description |
-|---|---|---|
-| `id` | UUID | Invoice ID |
-
-**Request Body** _(optional)_
-
-```json
-{
-  "reason": "Customer requested cancellation"
-}
-```
-
-**Response 200**
-
-```json
-{
-  "success": true,
-  "data": { "status": "cancelled" }
-}
-```
-
-**Error Responses**
-
-| Status | Code | When |
-|---|---|---|
-| 404 | `NOT_FOUND` | Invoice does not exist |
-| 422 | `INVALID_STATUS_TRANSITION` | Invoice is already `completed` |
 
 ---
 

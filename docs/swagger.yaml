@@ -14,7 +14,10 @@ info:
               failed ──→ submitted (retry)
     ```
 
-    Any non-completed invoice can be cancelled.
+    When Viettel returns `invoiceNo` synchronously the invoice moves straight to `completed`.
+    When Viettel processes asynchronously the invoice stays `processing` until the background
+    poller calls `QueryStatus` (using `transaction_uuid`) and receives the `invoiceNo`.
+    `external_id` is only set once `invoiceNo` is confirmed by Viettel.
 
     ## Authentication
 
@@ -209,45 +212,6 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
-    delete:
-      tags: [Invoices]
-      summary: Cancel invoice
-      description: |
-        Cancels an invoice. Only invoices that are NOT in `completed` status can be cancelled.
-        An optional reason can be provided in the request body.
-      operationId: cancelInvoice
-      parameters:
-        - $ref: "#/components/parameters/InvoiceId"
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CancelInvoiceRequest"
-      responses:
-        "200":
-          description: Invoice cancelled
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: "#/components/schemas/APIResponse"
-                  - type: object
-                    properties:
-                      data:
-                        type: object
-                        properties:
-                          status:
-                            type: string
-                            example: cancelled
-        "400":
-          $ref: "#/components/responses/ValidationError"
-        "404":
-          $ref: "#/components/responses/NotFoundError"
-        "422":
-          $ref: "#/components/responses/InvalidTransitionError"
-        "500":
-          $ref: "#/components/responses/InternalError"
 
   /api/v1/invoices/{id}/submit:
     post:
@@ -514,7 +478,7 @@ components:
   schemas:
     InvoiceStatus:
       type: string
-      enum: [draft, submitted, processing, completed, failed, cancelled]
+      enum: [draft, submitted, processing, completed, failed]
       description: |
         Invoice lifecycle status:
         - `draft` — Created locally, not yet submitted
@@ -522,7 +486,6 @@ components:
         - `processing` — Being processed by Viettel
         - `completed` — Successfully published and confirmed
         - `failed` — Publishing failed (can be retried via submit)
-        - `cancelled` — Cancelled by user
 
     CreateInvoiceRequest:
       type: object
@@ -603,11 +566,6 @@ components:
           maxLength: 100
           description: Source of the exchange rate
           example: "CoinGecko"
-        hbar_amount:
-          type: number
-          format: double
-          description: Amount in HBAR
-          example: 220.0
         token_total_amount:
           type: number
           format: double
@@ -802,14 +760,6 @@ components:
           description: Blockchain transaction hash
           example: "0x1234abcdef5678..."
 
-    CancelInvoiceRequest:
-      type: object
-      properties:
-        reason:
-          type: string
-          description: Optional cancellation reason
-          example: "Customer requested cancellation"
-
     ReportToAuthorityRequest:
       type: object
       required: [transaction_uuid, start_date, end_date]
@@ -836,11 +786,17 @@ components:
         external_id:
           type: string
           nullable: true
-          description: Viettel SInvoice external ID (assigned after publishing)
+          description: |
+            Viettel `invoiceNo` assigned after Viettel confirms the invoice.
+            Null while the invoice is in `processing` status (Viettel async).
+            Required for PDF download.
         transaction_uuid:
           type: string
           nullable: true
-          description: Viettel transaction UUID
+          description: |
+            UUID sent to Viettel when creating the invoice. Used internally
+            to poll Viettel status (`QueryStatus`) until `invoiceNo` is returned.
+            Set at invoice creation and never changes.
         status:
           $ref: "#/components/schemas/InvoiceStatus"
         buyer_name:
@@ -876,9 +832,6 @@ components:
           format: double
         exchange_rate_source:
           type: string
-        hbar_amount:
-          type: number
-          format: double
         token_total_amount:
           type: number
           format: double

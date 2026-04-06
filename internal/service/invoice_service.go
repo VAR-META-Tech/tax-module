@@ -133,33 +133,6 @@ func (s *InvoiceService) ListInvoices(ctx context.Context, filter domain.Invoice
 	return s.repo.List(ctx, filter)
 }
 
-func (s *InvoiceService) CancelInvoice(ctx context.Context, id uuid.UUID, reason string) error {
-	existing, err := s.repo.GetByID(ctx, id)
-	if err != nil {
-		return err
-	}
-	if !existing.Status.CanTransitionTo(domain.StatusCancelled) {
-		return domain.NewInvalidTransitionError(string(existing.Status), string(domain.StatusCancelled))
-	}
-
-	if err := s.repo.UpdateStatus(ctx, id, domain.StatusCancelled, reason); err != nil {
-		return err
-	}
-
-	_ = s.repo.AddStatusHistory(ctx, &domain.InvoiceStatusHistory{
-		ID:         uuid.New(),
-		InvoiceID:  id,
-		FromStatus: string(existing.Status),
-		ToStatus:   string(domain.StatusCancelled),
-		Reason:     reason,
-		ChangedBy:  "api",
-		CreatedAt:  time.Now(),
-	})
-
-	s.log.Info().Str("invoice_id", id.String()).Msg("Invoice cancelled")
-	return nil
-}
-
 func (s *InvoiceService) GetStatusHistory(ctx context.Context, invoiceID uuid.UUID) ([]*domain.InvoiceStatusHistory, error) {
 	if _, err := s.repo.GetByID(ctx, invoiceID); err != nil {
 		return nil, err

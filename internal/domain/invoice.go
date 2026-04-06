@@ -67,7 +67,6 @@ type Invoice struct {
 	TokenCurrency       string  `json:"token_currency"`
 	ExchangeRate        float64 `json:"exchange_rate"`
 	ExchangeRateSource  string  `json:"exchange_rate_source,omitempty"`
-	HbarAmount          float64 `json:"hbar_amount,omitempty"`
 	TokenTotalAmount    float64 `json:"token_total_amount"`
 	TokenTaxAmount      float64 `json:"token_tax_amount"`
 	TokenNetAmount      float64 `json:"token_net_amount"`
@@ -165,8 +164,8 @@ type AuditLog struct {
 
 // InvoicePublisher is the port for 3rd party invoice creation (Part 4.2).
 type InvoicePublisher interface {
-	CreateInvoice(ctx context.Context, invoice *Invoice) (externalID string, err error)
-	QueryStatus(ctx context.Context, externalID string) (status string, rawResponse []byte, err error)
+	CreateInvoice(ctx context.Context, invoice *Invoice) (invoiceNo string, err error)
+	QueryStatus(ctx context.Context, transactionUuid string) (status string, invoiceNo string, rawResponse []byte, err error)
 	ReportToAuthority(ctx context.Context, transactionUuid, startDate, endDate string) (successCount, errorCount int, err error)
 	DownloadInvoiceFile(ctx context.Context, invoiceNo, fileType string) (string, error)
 }

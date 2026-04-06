@@ -61,7 +61,6 @@ func (h *InvoiceHandler) CreateInvoice(c *gin.Context) {
 		TokenCurrency:         req.TokenCurrency,
 		ExchangeRate:          exchangeRate,
 		ExchangeRateSource:    req.ExchangeRateSource,
-		HbarAmount:            req.HbarAmount,
 		TokenTotalAmount:      req.TokenTotalAmount,
 		TokenTaxAmount:        req.TokenTaxAmount,
 		TokenNetAmount:        req.TokenNetAmount,
@@ -210,25 +209,6 @@ func (h *InvoiceHandler) GetInvoice(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, dto.SuccessResponse(invoice))
-}
-
-// CancelInvoice godoc DELETE /api/v1/invoices/:id
-func (h *InvoiceHandler) CancelInvoice(c *gin.Context) {
-	id, err := uuid.Parse(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse("VALIDATION_ERROR", "invalid invoice id"))
-		return
-	}
-
-	var req dto.CancelInvoiceRequest
-	_ = c.ShouldBindJSON(&req) // reason is optional
-
-	if err := h.svc.CancelInvoice(c.Request.Context(), id, req.Reason); err != nil {
-		handleError(c, err)
-		return
-	}
-
-	c.JSON(http.StatusOK, dto.SuccessResponse(gin.H{"status": "cancelled"}))
 }
 
 // ReportToAuthority godoc POST /api/v1/invoices/send-to-tax
