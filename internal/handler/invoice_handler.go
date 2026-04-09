@@ -32,15 +32,10 @@ func (h *InvoiceHandler) CreateInvoice(c *gin.Context) {
 		return
 	}
 
-	if req.TokenCurrency != "VND" && req.TokenCurrency != "HBAR" {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse("VALIDATION_ERROR", "token_currency must be VND or HBAR"))
-		return
-	}
-
 	exchangeRate := 1.0
-	if req.TokenCurrency == "HBAR" {
+	if req.TokenCurrency != "" && req.TokenCurrency != "VND" {
 		if req.ExchangeRate == nil || *req.ExchangeRate <= 0 {
-			c.JSON(http.StatusBadRequest, dto.ErrorResponse("VALIDATION_ERROR", "exchange_rate is required and must be > 0 when token_currency is HBAR"))
+			c.JSON(http.StatusBadRequest, dto.ErrorResponse("VALIDATION_ERROR", "exchange_rate is required and must be > 0 when token_currency is not VND"))
 			return
 		}
 		exchangeRate = *req.ExchangeRate
