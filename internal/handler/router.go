@@ -12,7 +12,7 @@ import (
 )
 
 // NewRouter creates the Gin engine with all routes registered.
-func NewRouter(log *zerolog.Logger, dbPool *pgxpool.Pool, invoiceSvc *service.InvoiceService) *gin.Engine {
+func NewRouter(log *zerolog.Logger, dbPool *pgxpool.Pool, invoiceSvc *service.InvoiceService, defaultProvider string) *gin.Engine {
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(cors.New(cors.Config{
@@ -21,7 +21,7 @@ func NewRouter(log *zerolog.Logger, dbPool *pgxpool.Pool, invoiceSvc *service.In
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept"},
 		AllowCredentials: true,
 	}))
-	inv := NewInvoiceHandler(invoiceSvc, log)
+	inv := NewInvoiceHandler(invoiceSvc, log, defaultProvider)
 
 	// System endpoints
 	router.GET("/health", healthCheck)

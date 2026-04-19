@@ -31,18 +31,18 @@ func (m *mockPublisher) CreateInvoice(_ context.Context, _ *domain.Invoice) (str
 	return "ext-" + uuid.New().String()[:8], nil
 }
 
-func (m *mockPublisher) QueryStatus(_ context.Context, _ string) (string, string, []byte, error) {
+func (m *mockPublisher) QueryStatus(_ context.Context, _ *domain.Invoice) (string, string, []byte, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.queryCalls++
 	return m.queryStatus, "", nil, nil
 }
 
-func (m *mockPublisher) ReportToAuthority(_ context.Context, _, _, _ string) (int, int, error) {
+func (m *mockPublisher) ReportToAuthority(_ context.Context, _, _, _, _ string) (int, int, error) {
 	return 0, 0, nil
 }
 
-func (m *mockPublisher) DownloadInvoiceFile(_ context.Context, _ string, _ string) (string, error) {
+func (m *mockPublisher) DownloadInvoiceFile(_ context.Context, _ string, _ *domain.Invoice, _ string) (string, error) {
 	return "", nil
 }
 

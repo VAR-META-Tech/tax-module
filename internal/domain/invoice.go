@@ -19,6 +19,12 @@ const (
 	StatusCancelled  InvoiceStatus = "cancelled"
 )
 
+// Provider constants identify which e-invoice provider handles an invoice.
+const (
+	ProviderViettel = "viettel"
+	ProviderMISA    = "misa"
+)
+
 // ValidTransitions defines which status transitions are allowed.
 var ValidTransitions = map[InvoiceStatus][]InvoiceStatus{
 	StatusDraft:      {StatusSubmitted, StatusCancelled},
@@ -47,6 +53,7 @@ type Invoice struct {
 	ExternalID      *string        `json:"external_id,omitempty"`
 	TransactionUuid *string        `json:"transaction_uuid,omitempty"`
 	Status          InvoiceStatus  `json:"status"`
+	Provider        string         `json:"provider"` // "viettel" or "misa"
 
 	// Buyer info — maps to Viettel buyerInfo
 	BuyerName       string         `json:"buyer_name"`
@@ -162,10 +169,15 @@ type AuditLog struct {
 	CreatedAt  time.Time `json:"created_at"`
 }
 
-// InvoicePublisher is the port for 3rd party invoice creation (Part 4.2).
+// InvoicePublisher is the port for 3rd party invoice creation.
 type InvoicePublisher interface {
 	CreateInvoice(ctx context.Context, invoice *Invoice) (invoiceNo string, err error)
-	QueryStatus(ctx context.Context, transactionUuid string) (status string, invoiceNo string, rawResponse []byte, err error)
-	ReportToAuthority(ctx context.Context, transactionUuid, startDate, endDate string) (successCount, errorCount int, err error)
-	DownloadInvoiceFile(ctx context.Context, invoiceNo, fileType string) (string, error)
+	// QueryStatus accepts the full invoice so each provider can extract its own tracking key.
+	// Viettel uses *invoice.TransactionUuid; MISA uses invoice.TransactionUuid as RefID.
+	QueryStatus(ctx context.Context, invoice *Invoice) (status string, invoiceNo string, rawResponse []byte, err error)
+	// ReportToAuthority includes provider so the dispatcher can route the call correctly.
+	ReportToAuthority(ctx context.Context, provider, transactionUuid, startDate, endDate string) (successCount, errorCount int, err error)
+	// DownloadInvoiceFile accepts the full invoice so each provider can extract the right identifier.
+	// Both Viettel and MISA use *invoice.ExternalID, but against different endpoints.
+	DownloadInvoiceFile(ctx context.Context, provider string, invoice *Invoice, fileType string) (string, error)
 }

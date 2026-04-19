@@ -25,7 +25,7 @@ const (
 
 // ViettelClient handles HTTP communication with the Viettel SInvoice API.
 type ViettelClient struct {
-	cfg       config.ThirdPartyConfig
+	cfg       config.ViettelConfig
 	http      *http.Client
 	tokenRepo domain.AccessTokenRepository
 	log       *zerolog.Logger
@@ -33,7 +33,7 @@ type ViettelClient struct {
 }
 
 // NewViettelClient creates a new Viettel HTTP client.
-func NewViettelClient(cfg config.ThirdPartyConfig, tokenRepo domain.AccessTokenRepository, log *zerolog.Logger) *ViettelClient {
+func NewViettelClient(cfg config.ViettelConfig, tokenRepo domain.AccessTokenRepository, log *zerolog.Logger) *ViettelClient {
 	return &ViettelClient{
 		cfg: cfg,
 		http: &http.Client{

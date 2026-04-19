@@ -67,7 +67,7 @@ func TestViettelClient_Login(t *testing.T) {
 	defer authServer.Close()
 
 	log := zerolog.Nop()
-	cfg := config.ThirdPartyConfig{
+	cfg := config.ViettelConfig{
 		AuthURL:  authServer.URL + "/auth/login",
 		Username: "testuser",
 		Password: "testpass",
@@ -123,7 +123,7 @@ func TestViettelClient_CreateInvoice(t *testing.T) {
 	defer server.Close()
 
 	log := zerolog.Nop()
-	cfg := config.ThirdPartyConfig{
+	cfg := config.ViettelConfig{
 		BaseURL:           server.URL + "/api",
 		AuthURL:           server.URL + "/auth/login",
 		CreateInvoicePath: "/InvoiceAPI/InvoiceWS/createInvoice",
@@ -170,7 +170,7 @@ func TestViettelClient_401Retry(t *testing.T) {
 	defer server.Close()
 
 	log := zerolog.Nop()
-	cfg := config.ThirdPartyConfig{
+	cfg := config.ViettelConfig{
 		BaseURL:  server.URL + "/api",
 		AuthURL:  server.URL + "/auth/login",
 		Username: "u",
@@ -221,7 +221,7 @@ func TestViettelPublisher_CreateInvoice(t *testing.T) {
 	defer server.Close()
 
 	log := zerolog.Nop()
-	cfg := config.ThirdPartyConfig{
+	cfg := config.ViettelConfig{
 		BaseURL:           server.URL + "/api",
 		AuthURL:           server.URL + "/auth/login",
 		CreateInvoicePath: "/InvoiceAPI/InvoiceWS/createInvoice",
@@ -277,7 +277,7 @@ func TestViettelPublisher_QueryStatus_Completed(t *testing.T) {
 	defer server.Close()
 
 	log := zerolog.Nop()
-	cfg := config.ThirdPartyConfig{
+	cfg := config.ViettelConfig{
 		BaseURL:         server.URL + "/api",
 		AuthURL:         server.URL + "/auth/login",
 		QueryStatusPath: "/InvoiceAPI/InvoiceWS/searchInvoiceByTransactionUuid",
@@ -290,7 +290,8 @@ func TestViettelPublisher_QueryStatus_Completed(t *testing.T) {
 	client := NewViettelClient(cfg, newMemTokenRepo(), &log)
 	publisher := NewViettelPublisher(client, cfg, config.SellerConfig{}, &log)
 
-	status, _, rawResp, err := publisher.QueryStatus(context.Background(), "txn-123")
+	txnUuid := "txn-123"
+	status, _, rawResp, err := publisher.QueryStatus(context.Background(), &domain.Invoice{TransactionUuid: &txnUuid})
 	if err != nil {
 		t.Fatalf("QueryStatus: %v", err)
 	}
@@ -319,7 +320,7 @@ func TestViettelPublisher_QueryStatus_Pending(t *testing.T) {
 	defer server.Close()
 
 	log := zerolog.Nop()
-	cfg := config.ThirdPartyConfig{
+	cfg := config.ViettelConfig{
 		BaseURL:         server.URL + "/api",
 		AuthURL:         server.URL + "/auth/login",
 		QueryStatusPath: "/InvoiceAPI/InvoiceWS/searchInvoiceByTransactionUuid",
@@ -332,7 +333,8 @@ func TestViettelPublisher_QueryStatus_Pending(t *testing.T) {
 	client := NewViettelClient(cfg, newMemTokenRepo(), &log)
 	publisher := NewViettelPublisher(client, cfg, config.SellerConfig{}, &log)
 
-	status, _, _, err := publisher.QueryStatus(context.Background(), "txn-456")
+	txnUuid2 := "txn-456"
+	status, _, _, err := publisher.QueryStatus(context.Background(), &domain.Invoice{TransactionUuid: &txnUuid2})
 	if err != nil {
 		t.Fatalf("QueryStatus: %v", err)
 	}
@@ -393,7 +395,7 @@ func TestViettelClient_ReportToAuthorityByTransactionUuid(t *testing.T) {
 	defer server.Close()
 
 	log := zerolog.Nop()
-	cfg := config.ThirdPartyConfig{
+	cfg := config.ViettelConfig{
 		BaseURL:       server.URL + "/api",
 		AuthURL:       server.URL + "/auth/login",
 		ReportToAuthorityPath: "/InvoiceAPI/InvoiceWS/sendInvoiceByTransactionUuid",
@@ -443,7 +445,7 @@ func TestViettelPublisher_ReportToAuthority_Success(t *testing.T) {
 	defer server.Close()
 
 	log := zerolog.Nop()
-	cfg := config.ThirdPartyConfig{
+	cfg := config.ViettelConfig{
 		BaseURL:       server.URL + "/api",
 		AuthURL:       server.URL + "/auth/login",
 		ReportToAuthorityPath: "/InvoiceAPI/InvoiceWS/sendInvoiceByTransactionUuid",
@@ -458,7 +460,7 @@ func TestViettelPublisher_ReportToAuthority_Success(t *testing.T) {
 
 	txnUuid := "txn-abc-123"
 
-	successCount, errorCount, err := publisher.ReportToAuthority(context.Background(), txnUuid, "2026-03-01", "2026-03-31")
+	successCount, errorCount, err := publisher.ReportToAuthority(context.Background(), domain.ProviderViettel, txnUuid, "2026-03-01", "2026-03-31")
 	if err != nil {
 		t.Fatalf("ReportToAuthority: %v", err)
 	}
@@ -496,7 +498,7 @@ func TestViettelPublisher_ReportToAuthority_PartialFailure(t *testing.T) {
 	defer server.Close()
 
 	log := zerolog.Nop()
-	cfg := config.ThirdPartyConfig{
+	cfg := config.ViettelConfig{
 		BaseURL:       server.URL + "/api",
 		AuthURL:       server.URL + "/auth/login",
 		ReportToAuthorityPath: "/InvoiceAPI/InvoiceWS/sendInvoiceByTransactionUuid",
@@ -511,7 +513,7 @@ func TestViettelPublisher_ReportToAuthority_PartialFailure(t *testing.T) {
 
 	txnUuid := "txn-abc-123"
 
-	successCount, errorCount, err := publisher.ReportToAuthority(context.Background(), txnUuid, "2026-03-01", "2026-03-31")
+	successCount, errorCount, err := publisher.ReportToAuthority(context.Background(), domain.ProviderViettel, txnUuid, "2026-03-01", "2026-03-31")
 	if err == nil {
 		t.Fatal("expected error for partial failure, got nil")
 	}
@@ -525,12 +527,12 @@ func TestViettelPublisher_ReportToAuthority_PartialFailure(t *testing.T) {
 
 func TestViettelPublisher_ReportToAuthority_EmptyTransactionUuid(t *testing.T) {
 	log := zerolog.Nop()
-	cfg := config.ThirdPartyConfig{}
+	cfg := config.ViettelConfig{}
 	client := NewViettelClient(cfg, newMemTokenRepo(), &log)
 	publisher := NewViettelPublisher(client, cfg, config.SellerConfig{}, &log)
 
 	// Calling with empty transactionUuid will fail at the HTTP call level
-	_, _, err := publisher.ReportToAuthority(context.Background(), "", "2026-03-01", "2026-03-31")
+	_, _, err := publisher.ReportToAuthority(context.Background(), domain.ProviderViettel, "", "2026-03-01", "2026-03-31")
 	if err == nil {
 		t.Fatal("expected error for empty transaction_uuid, got nil")
 	}

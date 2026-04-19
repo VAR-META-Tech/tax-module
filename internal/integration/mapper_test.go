@@ -21,7 +21,7 @@ var sellerCfg = config.SellerConfig{
 }
 
 func TestMapInvoiceToViettel(t *testing.T) {
-	cfg := config.ThirdPartyConfig{
+	cfg := config.ViettelConfig{
 		InvoiceType:   "1",
 		TemplateCode:  "01GTKT0/001",
 		InvoiceSeries: "AA/22E",
@@ -97,7 +97,7 @@ func TestMapInvoiceToViettel(t *testing.T) {
 }
 
 func TestMapInvoiceToViettel_MultipleItems(t *testing.T) {
-	cfg := config.ThirdPartyConfig{InvoiceType: "1", TemplateCode: "01GTKT0/001", InvoiceSeries: "AA/22E"}
+	cfg := config.ViettelConfig{InvoiceType: "1", TemplateCode: "01GTKT0/001", InvoiceSeries: "AA/22E"}
 	invoice := &domain.Invoice{
 		ID: uuid.New(), Currency: "VND",
 		TotalAmountWithTax: 23100, TotalTaxAmount: 2100, TotalAmountWithoutTax: 21000,
@@ -119,7 +119,7 @@ func TestMapInvoiceToViettel_MultipleItems(t *testing.T) {
 }
 
 func TestMapInvoiceToViettel_EmptyItems(t *testing.T) {
-	cfg := config.ThirdPartyConfig{InvoiceType: "1"}
+	cfg := config.ViettelConfig{InvoiceType: "1"}
 	invoice := &domain.Invoice{ID: uuid.New(), Currency: "VND", Items: []*domain.InvoiceItem{}}
 	result := MapInvoiceToViettel(invoice, cfg, sellerCfg)
 	if len(result.ItemInfo) != 0 {
@@ -128,7 +128,7 @@ func TestMapInvoiceToViettel_EmptyItems(t *testing.T) {
 }
 
 func TestMapInvoiceToViettel_FallbackUuid(t *testing.T) {
-	cfg := config.ThirdPartyConfig{InvoiceType: "1"}
+	cfg := config.ViettelConfig{InvoiceType: "1"}
 	// No TransactionUuid set — mapper should generate a new one as fallback.
 	invoice := &domain.Invoice{ID: uuid.New(), Currency: "VND", Items: []*domain.InvoiceItem{}}
 	result := MapInvoiceToViettel(invoice, cfg, sellerCfg)
@@ -141,7 +141,7 @@ func TestMapInvoiceToViettel_FallbackUuid(t *testing.T) {
 }
 
 func TestMapInvoiceToViettel_ReusesUuid(t *testing.T) {
-	cfg := config.ThirdPartyConfig{InvoiceType: "1"}
+	cfg := config.ViettelConfig{InvoiceType: "1"}
 	txnUuid := "550e8400-e29b-41d4-a716-446655440000"
 	invoice := &domain.Invoice{
 		ID: uuid.New(), Currency: "VND",
@@ -197,7 +197,7 @@ func TestBuildTaxBreakdowns_GroupsByRate(t *testing.T) {
 }
 
 func TestMapInvoiceToViettel_TimestampFormat(t *testing.T) {
-	cfg := config.ThirdPartyConfig{InvoiceType: "1"}
+	cfg := config.ViettelConfig{InvoiceType: "1"}
 	invoice := &domain.Invoice{ID: uuid.New(), Currency: "VND", Items: []*domain.InvoiceItem{}}
 	result := MapInvoiceToViettel(invoice, cfg, sellerCfg)
 	ts := *result.GeneralInvoiceInfo.InvoiceIssuedDate

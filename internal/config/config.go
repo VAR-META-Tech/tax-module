@@ -9,12 +9,14 @@ import (
 )
 
 type Config struct {
-	Server     ServerConfig
-	Database   DatabaseConfig
-	ThirdParty ThirdPartyConfig
-	Worker     WorkerConfig
-	Log        LogConfig
-	Seller     SellerConfig
+	Server   ServerConfig
+	Database DatabaseConfig
+	Viettel  ViettelConfig
+	MISA     MISAConfig
+	Provider ProviderConfig
+	Worker   WorkerConfig
+	Log      LogConfig
+	Seller   SellerConfig
 }
 
 type ServerConfig struct {
@@ -41,7 +43,7 @@ func (d DatabaseConfig) DSN() string {
 	)
 }
 
-type ThirdPartyConfig struct {
+type ViettelConfig struct {
 	BaseURL           string        `mapstructure:"THIRD_PARTY_BASE_URL"`
 	AuthURL           string        `mapstructure:"THIRD_PARTY_AUTH_URL"`
 	CreateInvoicePath string        `mapstructure:"THIRD_PARTY_CREATE_PATH"`
@@ -56,6 +58,24 @@ type ThirdPartyConfig struct {
 	TemplateCode      string        `mapstructure:"THIRD_PARTY_TEMPLATE_CODE"`
 	InvoiceSeries     string        `mapstructure:"THIRD_PARTY_INVOICE_SERIES"`
 	InvoiceType       string        `mapstructure:"THIRD_PARTY_INVOICE_TYPE"`
+}
+
+// MISAConfig holds configuration for the MISA MeInvoice integration API.
+type MISAConfig struct {
+	BaseURL         string        `mapstructure:"MISA_BASE_URL"`
+	AppID           string        `mapstructure:"MISA_APP_ID"`
+	TaxCode         string        `mapstructure:"MISA_TAX_CODE"`
+	Username        string        `mapstructure:"MISA_USERNAME"`
+	Password        string        `mapstructure:"MISA_PASSWORD"`
+	InvoiceWithCode bool          `mapstructure:"MISA_INVOICE_WITH_CODE"`
+	InvoiceCalcu    bool          `mapstructure:"MISA_INVOICE_CALCU"`
+	SignType         int          `mapstructure:"MISA_SIGN_TYPE"`
+	Timeout         time.Duration `mapstructure:"MISA_TIMEOUT"`
+}
+
+// ProviderConfig controls which e-invoice provider is used by default.
+type ProviderConfig struct {
+	Default string `mapstructure:"DEFAULT_PROVIDER"`
 }
 
 type WorkerConfig struct {
@@ -114,6 +134,19 @@ func Load() (*Config, error) {
 	viper.SetDefault("THIRD_PARTY_INVOICE_SERIES", "")
 	viper.SetDefault("THIRD_PARTY_INVOICE_TYPE", "1")
 
+	// MISA MeInvoice defaults
+	viper.SetDefault("MISA_BASE_URL", "https://api.meinvoice.vn/api/integration")
+	viper.SetDefault("MISA_APP_ID", "")
+	viper.SetDefault("MISA_TAX_CODE", "")
+	viper.SetDefault("MISA_USERNAME", "")
+	viper.SetDefault("MISA_PASSWORD", "")
+	viper.SetDefault("MISA_INVOICE_WITH_CODE", true)
+	viper.SetDefault("MISA_INVOICE_CALCU", false)
+	viper.SetDefault("MISA_SIGN_TYPE", 2)
+	viper.SetDefault("MISA_TIMEOUT", "30s")
+
+	viper.SetDefault("DEFAULT_PROVIDER", "viettel")
+
 	viper.SetDefault("WORKER_POOL_SIZE", 10)
 	viper.SetDefault("WORKER_QUEUE_SIZE", 100)
 	viper.SetDefault("WORKER_POLL_INTERVAL", "60s")
@@ -156,21 +189,35 @@ func Load() (*Config, error) {
 			MaxOpenConns: viper.GetInt("DB_MAX_OPEN_CONNS"),
 			MaxIdleConns: viper.GetInt("DB_MAX_IDLE_CONNS"),
 		},
-		ThirdParty: ThirdPartyConfig{
-			BaseURL:           viper.GetString("THIRD_PARTY_BASE_URL"),
-			AuthURL:           viper.GetString("THIRD_PARTY_AUTH_URL"),
-			CreateInvoicePath: viper.GetString("THIRD_PARTY_CREATE_PATH"),
-			QueryStatusPath:   viper.GetString("THIRD_PARTY_QUERY_PATH"),
+		Viettel: ViettelConfig{
+			BaseURL:               viper.GetString("THIRD_PARTY_BASE_URL"),
+			AuthURL:               viper.GetString("THIRD_PARTY_AUTH_URL"),
+			CreateInvoicePath:     viper.GetString("THIRD_PARTY_CREATE_PATH"),
+			QueryStatusPath:       viper.GetString("THIRD_PARTY_QUERY_PATH"),
 			ReportToAuthorityPath: viper.GetString("THIRD_PARTY_REPORT_TO_AUTHORITY_PATH"),
 			GetFilePath:           viper.GetString("THIRD_PARTY_GET_FILE_PATH"),
-			SupplierCode:      viper.GetString("THIRD_PARTY_SUPPLIER_CODE"),
-			Username:          viper.GetString("THIRD_PARTY_USERNAME"),
-			Password:          viper.GetString("THIRD_PARTY_PASSWORD"),
-			APIKey:            viper.GetString("THIRD_PARTY_API_KEY"),
-			Timeout:           viper.GetDuration("THIRD_PARTY_TIMEOUT"),
-			TemplateCode:      viper.GetString("THIRD_PARTY_TEMPLATE_CODE"),
-			InvoiceSeries:     viper.GetString("THIRD_PARTY_INVOICE_SERIES"),
-			InvoiceType:       viper.GetString("THIRD_PARTY_INVOICE_TYPE"),
+			SupplierCode:          viper.GetString("THIRD_PARTY_SUPPLIER_CODE"),
+			Username:              viper.GetString("THIRD_PARTY_USERNAME"),
+			Password:              viper.GetString("THIRD_PARTY_PASSWORD"),
+			APIKey:                viper.GetString("THIRD_PARTY_API_KEY"),
+			Timeout:               viper.GetDuration("THIRD_PARTY_TIMEOUT"),
+			TemplateCode:          viper.GetString("THIRD_PARTY_TEMPLATE_CODE"),
+			InvoiceSeries:         viper.GetString("THIRD_PARTY_INVOICE_SERIES"),
+			InvoiceType:           viper.GetString("THIRD_PARTY_INVOICE_TYPE"),
+		},
+		MISA: MISAConfig{
+			BaseURL:         viper.GetString("MISA_BASE_URL"),
+			AppID:           viper.GetString("MISA_APP_ID"),
+			TaxCode:         viper.GetString("MISA_TAX_CODE"),
+			Username:        viper.GetString("MISA_USERNAME"),
+			Password:        viper.GetString("MISA_PASSWORD"),
+			InvoiceWithCode: viper.GetBool("MISA_INVOICE_WITH_CODE"),
+			InvoiceCalcu:    viper.GetBool("MISA_INVOICE_CALCU"),
+			SignType:        viper.GetInt("MISA_SIGN_TYPE"),
+			Timeout:         viper.GetDuration("MISA_TIMEOUT"),
+		},
+		Provider: ProviderConfig{
+			Default: viper.GetString("DEFAULT_PROVIDER"),
 		},
 		Worker: WorkerConfig{
 			PoolSize:     viper.GetInt("WORKER_POOL_SIZE"),

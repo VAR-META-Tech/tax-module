@@ -49,17 +49,24 @@ func main() {
 	tokenRepo := postgres.NewAccessTokenRepo(dbPool, &log)
 
 	// Viettel SInvoice integration
-	viettelClient := integration.NewViettelClient(cfg.ThirdParty, tokenRepo, &log)
-	viettelPublisher := integration.NewViettelPublisher(viettelClient, cfg.ThirdParty, cfg.Seller, &log)
+	viettelClient := integration.NewViettelClient(cfg.Viettel, tokenRepo, &log)
+	viettelPublisher := integration.NewViettelPublisher(viettelClient, cfg.Viettel, cfg.Seller, &log)
+
+	// MISA MeInvoice integration
+	misaClient := integration.NewMISAClient(cfg.MISA, tokenRepo, &log)
+	misaPublisher := integration.NewMISAPublisher(misaClient, cfg.MISA, &log)
+
+	// Multi-provider dispatcher — routes by invoice.Provider
+	publisher := integration.NewDispatchingPublisher(cfg.Provider.Default, viettelPublisher, misaPublisher)
 
 	// Worker pool
-	workerPool := worker.NewPool(cfg.Worker, viettelPublisher, invoiceRepo, &log)
+	workerPool := worker.NewPool(cfg.Worker, publisher, invoiceRepo, &log)
 	workerPool.Start(ctx)
 	enqueuer := worker.NewAdapter(workerPool)
 
-	invoiceSvc := service.NewInvoiceService(invoiceRepo, viettelPublisher, enqueuer, &log)
+	invoiceSvc := service.NewInvoiceService(invoiceRepo, publisher, enqueuer, &log)
 
-	router := handler.NewRouter(&log, dbPool, invoiceSvc)
+	router := handler.NewRouter(&log, dbPool, invoiceSvc, cfg.Provider.Default)
 
 	server := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Server.Port),

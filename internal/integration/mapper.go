@@ -12,7 +12,7 @@ import (
 // MapInvoiceToViettel converts a domain Invoice into a ViettelInvoiceRequest.
 // It reuses invoice.TransactionUuid for idempotent retries. Falls back to a new UUID
 // if TransactionUuid is not set (e.g., legacy invoices before this field existed).
-func MapInvoiceToViettel(invoice *domain.Invoice, cfg config.ThirdPartyConfig, sellerCfg config.SellerConfig) *ViettelInvoiceRequest {
+func MapInvoiceToViettel(invoice *domain.Invoice, cfg config.ViettelConfig, sellerCfg config.SellerConfig) *ViettelInvoiceRequest {
 	transactionUuid := ""
 	if invoice.TransactionUuid != nil && *invoice.TransactionUuid != "" {
 		transactionUuid = *invoice.TransactionUuid

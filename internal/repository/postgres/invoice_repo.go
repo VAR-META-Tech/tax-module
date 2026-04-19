@@ -27,7 +27,7 @@ func NewInvoiceRepo(pool *pgxpool.Pool, log *zerolog.Logger) *InvoiceRepo {
 }
 
 // invoiceColumns is the shared column list for SELECT queries on the invoices table.
-const invoiceColumns = `id, external_id, transaction_uuid, status,
+const invoiceColumns = `id, external_id, transaction_uuid, status, provider,
 	buyer_name, buyer_legal_name, buyer_tax_code, buyer_address,
 	buyer_email, buyer_phone, buyer_code,
 	currency, total_amount_with_tax, total_tax_amount, total_amount_without_tax,
@@ -41,7 +41,7 @@ const invoiceColumns = `id, external_id, transaction_uuid, status,
 func scanInvoice(row interface{ Scan(dest ...any) error }) (*domain.Invoice, error) {
 	var inv domain.Invoice
 	err := row.Scan(
-		&inv.ID, &inv.ExternalID, &inv.TransactionUuid, &inv.Status,
+		&inv.ID, &inv.ExternalID, &inv.TransactionUuid, &inv.Status, &inv.Provider,
 		&inv.BuyerName, &inv.BuyerLegalName, &inv.BuyerTaxCode, &inv.BuyerAddress,
 		&inv.BuyerEmail, &inv.BuyerPhone, &inv.BuyerCode,
 		&inv.Currency, &inv.TotalAmountWithTax, &inv.TotalTaxAmount, &inv.TotalAmountWithoutTax,
@@ -58,7 +58,7 @@ func scanInvoice(row interface{ Scan(dest ...any) error }) (*domain.Invoice, err
 
 func (r *InvoiceRepo) Create(ctx context.Context, invoice *domain.Invoice) error {
 	query := `
-		INSERT INTO invoices (id, external_id, transaction_uuid, status,
+		INSERT INTO invoices (id, external_id, transaction_uuid, status, provider,
 			buyer_name, buyer_legal_name, buyer_tax_code, buyer_address,
 			buyer_email, buyer_phone, buyer_code,
 			currency, total_amount_with_tax, total_tax_amount, total_amount_without_tax,
@@ -66,10 +66,10 @@ func (r *InvoiceRepo) Create(ctx context.Context, invoice *domain.Invoice) error
 			token_total_amount, token_tax_amount, token_net_amount,
 			payment_method, transaction_hash, erp_order_id,
 			notes, issued_at, metadata, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29)`
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30)`
 
 	_, err := r.pool.Exec(ctx, query,
-		invoice.ID, invoice.ExternalID, invoice.TransactionUuid, invoice.Status,
+		invoice.ID, invoice.ExternalID, invoice.TransactionUuid, invoice.Status, invoice.Provider,
 		invoice.BuyerName, invoice.BuyerLegalName, invoice.BuyerTaxCode, invoice.BuyerAddress,
 		invoice.BuyerEmail, invoice.BuyerPhone, invoice.BuyerCode,
 		invoice.Currency, invoice.TotalAmountWithTax, invoice.TotalTaxAmount, invoice.TotalAmountWithoutTax,
@@ -92,7 +92,7 @@ func (r *InvoiceRepo) CreateWithItems(ctx context.Context, invoice *domain.Invoi
 	defer tx.Rollback(ctx)
 
 	invoiceQuery := `
-		INSERT INTO invoices (id, external_id, transaction_uuid, status,
+		INSERT INTO invoices (id, external_id, transaction_uuid, status, provider,
 			buyer_name, buyer_legal_name, buyer_tax_code, buyer_address,
 			buyer_email, buyer_phone, buyer_code,
 			currency, total_amount_with_tax, total_tax_amount, total_amount_without_tax,
@@ -100,10 +100,10 @@ func (r *InvoiceRepo) CreateWithItems(ctx context.Context, invoice *domain.Invoi
 			token_total_amount, token_tax_amount, token_net_amount,
 			payment_method, transaction_hash, erp_order_id,
 			notes, issued_at, metadata, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29)`
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30)`
 
 	_, err = tx.Exec(ctx, invoiceQuery,
-		invoice.ID, invoice.ExternalID, invoice.TransactionUuid, invoice.Status,
+		invoice.ID, invoice.ExternalID, invoice.TransactionUuid, invoice.Status, invoice.Provider,
 		invoice.BuyerName, invoice.BuyerLegalName, invoice.BuyerTaxCode, invoice.BuyerAddress,
 		invoice.BuyerEmail, invoice.BuyerPhone, invoice.BuyerCode,
 		invoice.Currency, invoice.TotalAmountWithTax, invoice.TotalTaxAmount, invoice.TotalAmountWithoutTax,
@@ -172,20 +172,20 @@ func (r *InvoiceRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Invoic
 func (r *InvoiceRepo) Update(ctx context.Context, invoice *domain.Invoice) error {
 	query := `
 		UPDATE invoices SET
-			external_id=$1, transaction_uuid=$2,
-			buyer_name=$3, buyer_legal_name=$4, buyer_tax_code=$5, buyer_address=$6,
-			buyer_email=$7, buyer_phone=$8, buyer_code=$9,
-			currency=$10, total_amount_with_tax=$11, total_tax_amount=$12, total_amount_without_tax=$13,
-			token_currency=$14, exchange_rate=$15, exchange_rate_source=$16,
-			token_total_amount=$17, token_tax_amount=$18, token_net_amount=$19,
-			payment_method=$20, transaction_hash=$21, erp_order_id=$22,
-			notes=$23, issued_at=$24,
-			submitted_at=$25, completed_at=$26, retry_count=$27, last_error=$28,
-			metadata=$29, updated_at=$30
-		WHERE id = $31`
+			external_id=$1, transaction_uuid=$2, provider=$3,
+			buyer_name=$4, buyer_legal_name=$5, buyer_tax_code=$6, buyer_address=$7,
+			buyer_email=$8, buyer_phone=$9, buyer_code=$10,
+			currency=$11, total_amount_with_tax=$12, total_tax_amount=$13, total_amount_without_tax=$14,
+			token_currency=$15, exchange_rate=$16, exchange_rate_source=$17,
+			token_total_amount=$18, token_tax_amount=$19, token_net_amount=$20,
+			payment_method=$21, transaction_hash=$22, erp_order_id=$23,
+			notes=$24, issued_at=$25,
+			submitted_at=$26, completed_at=$27, retry_count=$28, last_error=$29,
+			metadata=$30, updated_at=$31
+		WHERE id = $32`
 
 	tag, err := r.pool.Exec(ctx, query,
-		invoice.ExternalID, invoice.TransactionUuid,
+		invoice.ExternalID, invoice.TransactionUuid, invoice.Provider,
 		invoice.BuyerName, invoice.BuyerLegalName, invoice.BuyerTaxCode, invoice.BuyerAddress,
 		invoice.BuyerEmail, invoice.BuyerPhone, invoice.BuyerCode,
 		invoice.Currency, invoice.TotalAmountWithTax, invoice.TotalTaxAmount, invoice.TotalAmountWithoutTax,

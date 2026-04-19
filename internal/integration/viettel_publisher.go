@@ -14,13 +14,13 @@ import (
 // ViettelPublisher implements domain.InvoicePublisher using the Viettel SInvoice API.
 type ViettelPublisher struct {
 	client    *ViettelClient
-	cfg       config.ThirdPartyConfig
+	cfg       config.ViettelConfig
 	sellerCfg config.SellerConfig
 	log       *zerolog.Logger
 }
 
 // NewViettelPublisher creates a new publisher backed by Viettel.
-func NewViettelPublisher(client *ViettelClient, cfg config.ThirdPartyConfig, sellerCfg config.SellerConfig, log *zerolog.Logger) *ViettelPublisher {
+func NewViettelPublisher(client *ViettelClient, cfg config.ViettelConfig, sellerCfg config.SellerConfig, log *zerolog.Logger) *ViettelPublisher {
 	return &ViettelPublisher{client: client, cfg: cfg, sellerCfg: sellerCfg, log: log}
 }
 
@@ -74,7 +74,11 @@ func (p *ViettelPublisher) CreateInvoice(ctx context.Context, invoice *domain.In
 
 // QueryStatus checks invoice status via searchByTransactionUuid.
 // Returns status, invoiceNo (empty if not yet assigned), raw response.
-func (p *ViettelPublisher) QueryStatus(ctx context.Context, transactionUuid string) (string, string, []byte, error) {
+func (p *ViettelPublisher) QueryStatus(ctx context.Context, invoice *domain.Invoice) (string, string, []byte, error) {
+	transactionUuid := ""
+	if invoice.TransactionUuid != nil {
+		transactionUuid = *invoice.TransactionUuid
+	}
 	resp, err := p.client.SearchByTransactionUuid(ctx, transactionUuid, p.cfg.SupplierCode)
 	if err != nil {
 		return "", "", nil, err
@@ -103,7 +107,8 @@ func (p *ViettelPublisher) QueryStatus(ctx context.Context, transactionUuid stri
 }
 
 // ReportToAuthority sends a completed invoice to the tax authority (CQT) via Viettel (§7.36).
-func (p *ViettelPublisher) ReportToAuthority(ctx context.Context, transactionUuid, startDate, endDate string) (int, int, error) {
+// The provider param is used by the dispatcher for routing and is ignored here.
+func (p *ViettelPublisher) ReportToAuthority(ctx context.Context, provider, transactionUuid, startDate, endDate string) (int, int, error) {
 	req := &ReportToAuthorityRequest{
 		SupplierTaxCode: p.cfg.SupplierCode,
 		TransactionUuid: transactionUuid,
@@ -146,7 +151,13 @@ func (p *ViettelPublisher) ReportToAuthority(ctx context.Context, transactionUui
 }
 
 // DownloadInvoiceFile downloads the invoice PDF/ZIP from Viettel and returns the raw base64 string.
-func (p *ViettelPublisher) DownloadInvoiceFile(ctx context.Context, invoiceNo, fileType string) (string, error) {
+// The provider param is used by the dispatcher for routing and is ignored here.
+// Viettel uses invoice.ExternalID (invoiceNo) to identify the file.
+func (p *ViettelPublisher) DownloadInvoiceFile(ctx context.Context, provider string, invoice *domain.Invoice, fileType string) (string, error) {
+	invoiceNo := ""
+	if invoice.ExternalID != nil {
+		invoiceNo = *invoice.ExternalID
+	}
 	req := &GetInvoiceFileRequest{
 		SupplierTaxCode: p.cfg.SupplierCode,
 		InvoiceNo:       invoiceNo,

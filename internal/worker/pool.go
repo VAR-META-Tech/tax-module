@@ -253,7 +253,7 @@ func (p *Pool) handlePoll(ctx context.Context, invoiceID uuid.UUID, log *zerolog
 		return
 	}
 
-	status, invoiceNo, rawResponse, err := p.publisher.QueryStatus(ctx, *invoice.TransactionUuid)
+	status, invoiceNo, rawResponse, err := p.publisher.QueryStatus(ctx, invoice)
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to query invoice status")
 		return

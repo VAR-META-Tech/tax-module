@@ -13,25 +13,25 @@ import (
 // --- Mock publisher ---
 
 type mockPublisher struct {
-	reportToAuthorityFn func(ctx context.Context, transactionUuid, startDate, endDate string) (int, int, error)
+	reportToAuthorityFn func(ctx context.Context, provider, transactionUuid, startDate, endDate string) (int, int, error)
 }
 
 func (m *mockPublisher) CreateInvoice(_ context.Context, _ *domain.Invoice) (string, error) {
 	return "", nil
 }
 
-func (m *mockPublisher) QueryStatus(_ context.Context, _ string) (string, string, []byte, error) {
+func (m *mockPublisher) QueryStatus(_ context.Context, _ *domain.Invoice) (string, string, []byte, error) {
 	return "", "", nil, nil
 }
 
-func (m *mockPublisher) ReportToAuthority(ctx context.Context, transactionUuid, startDate, endDate string) (int, int, error) {
+func (m *mockPublisher) ReportToAuthority(ctx context.Context, provider, transactionUuid, startDate, endDate string) (int, int, error) {
 	if m.reportToAuthorityFn != nil {
-		return m.reportToAuthorityFn(ctx, transactionUuid, startDate, endDate)
+		return m.reportToAuthorityFn(ctx, provider, transactionUuid, startDate, endDate)
 	}
 	return 1, 0, nil
 }
 
-func (m *mockPublisher) DownloadInvoiceFile(_ context.Context, _ string, _ string) (string, error) {
+func (m *mockPublisher) DownloadInvoiceFile(_ context.Context, _ string, _ *domain.Invoice, _ string) (string, error) {
 	return "", nil
 }
 
@@ -92,16 +92,17 @@ func (r *mockInvoiceRepo) UpdateTransactionHash(_ context.Context, _ uuid.UUID, 
 
 func TestReportToAuthority_Success(t *testing.T) {
 	log := zerolog.Nop()
+	txnUuid := "txn-abc-123"
 	svc := NewInvoiceService(
-		&mockInvoiceRepo{},
-		&mockPublisher{reportToAuthorityFn: func(_ context.Context, _, _, _ string) (int, int, error) {
+		&mockInvoiceRepo{invoice: &domain.Invoice{Provider: domain.ProviderViettel, TransactionUuid: &txnUuid}},
+		&mockPublisher{reportToAuthorityFn: func(_ context.Context, _, _, _, _ string) (int, int, error) {
 			return 1, 0, nil
 		}},
 		nil,
 		&log,
 	)
 
-	successCount, errorCount, err := svc.ReportToAuthority(context.Background(), "txn-abc-123", "2026-03-01", "2026-03-31")
+	successCount, errorCount, err := svc.ReportToAuthority(context.Background(), txnUuid, "2026-03-01", "2026-03-31")
 	if err != nil {
 		t.Fatalf("ReportToAuthority: %v", err)
 	}
@@ -115,16 +116,17 @@ func TestReportToAuthority_Success(t *testing.T) {
 
 func TestReportToAuthority_PublisherError(t *testing.T) {
 	log := zerolog.Nop()
+	txnUuid := "txn-abc-123"
 	svc := NewInvoiceService(
-		&mockInvoiceRepo{},
-		&mockPublisher{reportToAuthorityFn: func(_ context.Context, _, _, _ string) (int, int, error) {
+		&mockInvoiceRepo{invoice: &domain.Invoice{Provider: domain.ProviderViettel, TransactionUuid: &txnUuid}},
+		&mockPublisher{reportToAuthorityFn: func(_ context.Context, _, _, _, _ string) (int, int, error) {
 			return 0, 0, domain.NewThirdPartyError("network error", nil)
 		}},
 		nil,
 		&log,
 	)
 
-	_, _, err := svc.ReportToAuthority(context.Background(), "txn-abc-123", "2026-03-01", "2026-03-31")
+	_, _, err := svc.ReportToAuthority(context.Background(), txnUuid, "2026-03-01", "2026-03-31")
 	if err == nil {
 		t.Fatal("expected error from publisher, got nil")
 	}
@@ -132,16 +134,17 @@ func TestReportToAuthority_PublisherError(t *testing.T) {
 
 func TestReportToAuthority_PartialFailure(t *testing.T) {
 	log := zerolog.Nop()
+	txnUuid := "txn-abc-123"
 	svc := NewInvoiceService(
-		&mockInvoiceRepo{},
-		&mockPublisher{reportToAuthorityFn: func(_ context.Context, _, _, _ string) (int, int, error) {
+		&mockInvoiceRepo{invoice: &domain.Invoice{Provider: domain.ProviderViettel, TransactionUuid: &txnUuid}},
+		&mockPublisher{reportToAuthorityFn: func(_ context.Context, _, _, _, _ string) (int, int, error) {
 			return 1, 1, domain.NewThirdPartyError("partial failure", nil)
 		}},
 		nil,
 		&log,
 	)
 
-	successCount, errorCount, err := svc.ReportToAuthority(context.Background(), "txn-abc-123", "2026-03-01", "2026-03-31")
+	successCount, errorCount, err := svc.ReportToAuthority(context.Background(), txnUuid, "2026-03-01", "2026-03-31")
 	if err == nil {
 		t.Fatal("expected error for partial failure, got nil")
 	}

@@ -148,10 +148,10 @@ func (s *InvoiceService) DownloadInvoiceFile(ctx context.Context, id uuid.UUID) 
 	}
 
 	if invoice.ExternalID == nil || *invoice.ExternalID == "" {
-		return "", "", domain.NewValidationError("invoice has not been published to Viettel yet")
+		return "", "", domain.NewValidationError("invoice has not been published to the provider yet")
 	}
 
-	fileBase64, err := s.publisher.DownloadInvoiceFile(ctx, *invoice.ExternalID, "PDF")
+	fileBase64, err := s.publisher.DownloadInvoiceFile(ctx, invoice.Provider, invoice, "PDF")
 	if err != nil {
 		return "", "", err
 	}
@@ -161,7 +161,12 @@ func (s *InvoiceService) DownloadInvoiceFile(ctx context.Context, id uuid.UUID) 
 
 // ReportToAuthority sends a completed invoice to the tax authority (CQT).
 func (s *InvoiceService) ReportToAuthority(ctx context.Context, transactionUuid, startDate, endDate string) (int, int, error) {
-	successCount, errorCount, err := s.publisher.ReportToAuthority(ctx, transactionUuid, startDate, endDate)
+	invoice, err := s.repo.GetByTransactionUuid(ctx, transactionUuid)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	successCount, errorCount, err := s.publisher.ReportToAuthority(ctx, invoice.Provider, transactionUuid, startDate, endDate)
 	if err != nil {
 		s.log.Error().Err(err).
 			Str("transaction_uuid", transactionUuid).

@@ -15,12 +15,13 @@ import (
 )
 
 type InvoiceHandler struct {
-	svc *service.InvoiceService
-	log *zerolog.Logger
+	svc             *service.InvoiceService
+	log             *zerolog.Logger
+	defaultProvider string
 }
 
-func NewInvoiceHandler(svc *service.InvoiceService, log *zerolog.Logger) *InvoiceHandler {
-	return &InvoiceHandler{svc: svc, log: log}
+func NewInvoiceHandler(svc *service.InvoiceService, log *zerolog.Logger, defaultProvider string) *InvoiceHandler {
+	return &InvoiceHandler{svc: svc, log: log, defaultProvider: defaultProvider}
 }
 
 // CreateInvoice godoc POST /api/v1/invoices
@@ -42,6 +43,7 @@ func (h *InvoiceHandler) CreateInvoice(c *gin.Context) {
 	}
 
 	invoice := &domain.Invoice{
+		Provider:              h.defaultProvider,
 		BuyerName:             req.BuyerName,
 		BuyerLegalName:        req.BuyerLegalName,
 		BuyerTaxCode:          req.BuyerTaxCode,
