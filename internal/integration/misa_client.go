@@ -43,13 +43,13 @@ func NewMISAClient(cfg config.MISAConfig, tokenRepo domain.AccessTokenRepository
 	}
 }
 
-// login authenticates with MISA and persists the token.
-func (c *MISAClient) login(ctx context.Context) error {
+// doLogin authenticates with MISA using the provided credentials and persists the token.
+func (c *MISAClient) doLogin(ctx context.Context, appID, taxCode, username, password string) error {
 	body, err := json.Marshal(MISAAuthRequest{
-		AppID:    c.cfg.AppID,
-		TaxCode:  c.cfg.TaxCode,
-		Username: c.cfg.Username,
-		Password: c.cfg.Password,
+		AppID:    appID,
+		TaxCode:  taxCode,
+		Username: username,
+		Password: password,
 	})
 	if err != nil {
 		return fmt.Errorf("misa login marshal: %w", err)
@@ -98,6 +98,27 @@ func (c *MISAClient) login(ctx context.Context) error {
 		Msg("MISA token refreshed")
 
 	return nil
+}
+
+// login authenticates using config credentials (used by auto-refresh).
+func (c *MISAClient) login(ctx context.Context) error {
+	return c.doLogin(ctx, c.cfg.AppID, c.cfg.TaxCode, c.cfg.Username, c.cfg.Password)
+}
+
+// LoginWithCredentials authenticates with the provided credentials, stores the token,
+// and returns its expiry time. Used by the auth handler for client-initiated login.
+func (c *MISAClient) LoginWithCredentials(ctx context.Context, username, password, appID, taxCode string) (time.Time, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if err := c.doLogin(ctx, appID, taxCode, username, password); err != nil {
+		return time.Time{}, err
+	}
+	tok, err := c.tokenRepo.Get(ctx, misaProviderName)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return tok.ExpiresAt, nil
 }
 
 // getToken returns a valid Bearer token, refreshing if needed.

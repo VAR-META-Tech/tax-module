@@ -33,54 +33,15 @@ func (h *InvoiceHandler) CreateInvoice(c *gin.Context) {
 		return
 	}
 
-	exchangeRate := 1.0
-	if req.TokenCurrency != "" && req.TokenCurrency != "VND" {
-		if req.ExchangeRate == nil || *req.ExchangeRate <= 0 {
-			c.JSON(http.StatusBadRequest, dto.ErrorResponse("VALIDATION_ERROR", "exchange_rate is required and must be > 0 when token_currency is not VND"))
-			return
-		}
-		exchangeRate = *req.ExchangeRate
-	}
-
-	invoice := &domain.Invoice{
-		Provider:              h.defaultProvider,
-		BuyerName:             req.BuyerName,
-		BuyerLegalName:        req.BuyerLegalName,
-		BuyerTaxCode:          req.BuyerTaxCode,
-		BuyerAddress:          req.BuyerAddress,
-		BuyerEmail:            req.BuyerEmail,
-		BuyerPhone:            req.BuyerPhone,
-		BuyerCode:             req.BuyerCode,
-		Currency:              "VND",
-		TotalAmountWithTax:    req.TotalAmountWithTax,
-		TotalTaxAmount:        req.TotalTaxAmount,
-		TotalAmountWithoutTax: req.TotalAmountWithoutTax,
-		TokenCurrency:         req.TokenCurrency,
-		ExchangeRate:          exchangeRate,
-		ExchangeRateSource:    req.ExchangeRateSource,
-		TokenTotalAmount:      req.TokenTotalAmount,
-		TokenTaxAmount:        req.TokenTaxAmount,
-		TokenNetAmount:        req.TokenNetAmount,
-		PaymentMethod:         req.PaymentMethod,
-		TransactionHash:       req.TransactionHash,
-		ErpOrderID:            req.ErpOrderID,
-		Notes:                 req.Notes,
-	}
-	if req.IssuedAt != nil {
-		if t, err := time.Parse(time.RFC3339, *req.IssuedAt); err == nil {
-			invoice.IssuedAt = &t
-		}
-	}
-
-	// Map items
+	// Map items first — needed to derive token totals when FE omits them.
 	items := make([]*domain.InvoiceItem, len(req.Items))
 	for i, ri := range req.Items {
 		items[i] = &domain.InvoiceItem{
 			ItemName:                     ri.ItemName,
 			Quantity:                     ri.Quantity,
 			UnitPrice:                    ri.UnitPrice,
-			TaxPercentage:               ri.TaxPercentage,
-			TaxAmount:                   ri.TaxAmount,
+			TaxPercentage:                ri.TaxPercentage,
+			TaxAmount:                    ri.TaxAmount,
 			ItemTotalAmountWithoutTax:    ri.ItemTotalAmountWithoutTax,
 			ItemTotalAmountWithTax:       ri.ItemTotalAmountWithTax,
 			ItemTotalAmountAfterDiscount: ri.ItemTotalAmountAfterDiscount,
@@ -103,6 +64,67 @@ func (h *InvoiceHandler) CreateInvoice(c *gin.Context) {
 			AdjustRatio:                  ri.AdjustRatio,
 			UnitPriceWithTax:             ri.UnitPriceWithTax,
 			SpecialInfo:                  toSpecialInfo(ri.SpecialInfo),
+		}
+	}
+
+	// Derive token totals from items when FE omits them.
+	tokenTotalAmount := req.TokenTotalAmount
+	if tokenTotalAmount == 0 {
+		for _, item := range items {
+			tokenTotalAmount += item.TokenLineTotal
+		}
+	}
+
+	tokenTaxAmount := req.TokenTaxAmount
+	if tokenTaxAmount == 0 {
+		for _, item := range items {
+			tokenTaxAmount += item.TokenTaxAmount
+		}
+	}
+
+	tokenNetAmount := req.TokenNetAmount
+	if tokenNetAmount == 0 {
+		tokenNetAmount = tokenTotalAmount - tokenTaxAmount
+	}
+
+	// Resolve exchange rate: use FE value if provided, otherwise compute from totals.
+	exchangeRate := 1.0
+	if req.TokenCurrency != "" && req.TokenCurrency != "VND" {
+		switch {
+		case req.ExchangeRate != nil && *req.ExchangeRate > 0:
+			exchangeRate = *req.ExchangeRate
+		case tokenTotalAmount > 0:
+			exchangeRate = req.TotalAmountWithTax / tokenTotalAmount
+		}
+	}
+
+	invoice := &domain.Invoice{
+		Provider:              h.defaultProvider,
+		BuyerName:             req.BuyerName,
+		BuyerLegalName:        req.BuyerLegalName,
+		BuyerTaxCode:          req.BuyerTaxCode,
+		BuyerAddress:          req.BuyerAddress,
+		BuyerEmail:            req.BuyerEmail,
+		BuyerPhone:            req.BuyerPhone,
+		BuyerCode:             req.BuyerCode,
+		Currency:              "VND",
+		TotalAmountWithTax:    req.TotalAmountWithTax,
+		TotalTaxAmount:        req.TotalTaxAmount,
+		TotalAmountWithoutTax: req.TotalAmountWithoutTax,
+		TokenCurrency:         req.TokenCurrency,
+		ExchangeRate:          exchangeRate,
+		ExchangeRateSource:    req.ExchangeRateSource,
+		TokenTotalAmount:      tokenTotalAmount,
+		TokenTaxAmount:        tokenTaxAmount,
+		TokenNetAmount:        tokenNetAmount,
+		PaymentMethod:         req.PaymentMethod,
+		TransactionHash:       req.TransactionHash,
+		ErpOrderID:            req.ErpOrderID,
+		Notes:                 req.Notes,
+	}
+	if req.IssuedAt != nil {
+		if t, err := time.Parse(time.RFC3339, *req.IssuedAt); err == nil {
+			invoice.IssuedAt = &t
 		}
 	}
 	invoice.Items = items
@@ -212,16 +234,14 @@ func (h *InvoiceHandler) GetInvoice(c *gin.Context) {
 func (h *InvoiceHandler) ReportToAuthority(c *gin.Context) {
 	var req struct {
 		TransactionUuid string `json:"transaction_uuid" binding:"required"`
-		StartDate       string `json:"start_date" binding:"required"`
-		EndDate         string `json:"end_date" binding:"required"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse("VALIDATION_ERROR", "transaction_uuid, start_date, end_date are required"))
+		c.JSON(http.StatusBadRequest, dto.ErrorResponse("VALIDATION_ERROR", "transaction_uuid is required"))
 		return
 	}
 
-	successCount, errorCount, err := h.svc.ReportToAuthority(c.Request.Context(), req.TransactionUuid, req.StartDate, req.EndDate)
+	successCount, errorCount, err := h.svc.ReportToAuthority(c.Request.Context(), req.TransactionUuid)
 	if err != nil {
 		if errorCount > 0 {
 			c.JSON(http.StatusOK, dto.SuccessResponse(gin.H{

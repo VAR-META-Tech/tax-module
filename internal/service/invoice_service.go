@@ -160,13 +160,20 @@ func (s *InvoiceService) DownloadInvoiceFile(ctx context.Context, id uuid.UUID) 
 }
 
 // ReportToAuthority sends a completed invoice to the tax authority (CQT).
-func (s *InvoiceService) ReportToAuthority(ctx context.Context, transactionUuid, startDate, endDate string) (int, int, error) {
+// start_date and end_date are derived from the invoice's issued date (or created date as fallback).
+func (s *InvoiceService) ReportToAuthority(ctx context.Context, transactionUuid string) (int, int, error) {
 	invoice, err := s.repo.GetByTransactionUuid(ctx, transactionUuid)
 	if err != nil {
 		return 0, 0, err
 	}
 
-	successCount, errorCount, err := s.publisher.ReportToAuthority(ctx, invoice.Provider, transactionUuid, startDate, endDate)
+	invoiceDate := invoice.CreatedAt
+	if invoice.IssuedAt != nil {
+		invoiceDate = *invoice.IssuedAt
+	}
+	date := invoiceDate.Format("2006-01-02")
+
+	successCount, errorCount, err := s.publisher.ReportToAuthority(ctx, invoice.Provider, transactionUuid, date, date)
 	if err != nil {
 		s.log.Error().Err(err).
 			Str("transaction_uuid", transactionUuid).

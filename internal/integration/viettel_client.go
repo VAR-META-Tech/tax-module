@@ -59,11 +59,11 @@ func (c *ViettelClient) getToken(ctx context.Context) (string, error) {
 	return c.login(ctx)
 }
 
-// login authenticates with Viettel and stores the token.
-func (c *ViettelClient) login(ctx context.Context) (string, error) {
+// doLogin authenticates with Viettel using the provided credentials and stores the token.
+func (c *ViettelClient) doLogin(ctx context.Context, username, password string) (string, error) {
 	body, err := json.Marshal(AuthRequest{
-		Username: c.cfg.Username,
-		Password: c.cfg.Password,
+		Username: username,
+		Password: password,
 	})
 	if err != nil {
 		return "", domain.NewInternalError("marshal auth request", err)
@@ -124,9 +124,32 @@ func (c *ViettelClient) login(ctx context.Context) (string, error) {
 	return authResp.AccessToken, nil
 }
 
+// login authenticates using config credentials (used by auto-refresh).
+func (c *ViettelClient) login(ctx context.Context) (string, error) {
+	return c.doLogin(ctx, c.cfg.Username, c.cfg.Password)
+}
+
+// LoginWithCredentials authenticates with the provided credentials, stores the token,
+// and returns its expiry time. Used by the auth handler for client-initiated login.
+func (c *ViettelClient) LoginWithCredentials(ctx context.Context, username, password string) (time.Time, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if _, err := c.doLogin(ctx, username, password); err != nil {
+		return time.Time{}, err
+	}
+	// SupplierCode == Username for Viettel — store so publisher picks it up
+	c.cfg.Username = username
+	tok, err := c.tokenRepo.Get(ctx, providerName)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return tok.ExpiresAt, nil
+}
+
 // CreateInvoice sends a create-invoice request to Viettel.
 func (c *ViettelClient) CreateInvoice(ctx context.Context, invoiceReq *ViettelInvoiceRequest) (*ViettelInvoiceResponse, error) {
-	url := fmt.Sprintf("%s%s/%s", c.cfg.BaseURL, c.cfg.CreateInvoicePath, c.cfg.SupplierCode)
+	url := fmt.Sprintf("%s%s/%s", c.cfg.BaseURL, c.cfg.CreateInvoicePath, c.cfg.Username)
 
 	body, err := json.Marshal(invoiceReq)
 	if err != nil {

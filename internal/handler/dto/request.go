@@ -83,6 +83,16 @@ type SpecialInfoItem struct {
 	Value string `json:"value" binding:"required"`
 }
 
+// --- Auth requests ---
+
+type LoginRequest struct {
+	Provider string `json:"provider" binding:"required,oneof=viettel misa"`
+	Username string `json:"username" binding:"required"`
+	Password string `json:"password" binding:"required"`
+	AppID    string `json:"app_id"`   // required when provider == "misa"
+	TaxCode  string `json:"tax_code"` // required when provider == "misa"
+}
+
 // --- Query params ---
 
 type ListInvoicesQuery struct {

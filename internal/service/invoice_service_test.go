@@ -102,7 +102,7 @@ func TestReportToAuthority_Success(t *testing.T) {
 		&log,
 	)
 
-	successCount, errorCount, err := svc.ReportToAuthority(context.Background(), txnUuid, "2026-03-01", "2026-03-31")
+	successCount, errorCount, err := svc.ReportToAuthority(context.Background(), txnUuid)
 	if err != nil {
 		t.Fatalf("ReportToAuthority: %v", err)
 	}
@@ -126,7 +126,7 @@ func TestReportToAuthority_PublisherError(t *testing.T) {
 		&log,
 	)
 
-	_, _, err := svc.ReportToAuthority(context.Background(), txnUuid, "2026-03-01", "2026-03-31")
+	_, _, err := svc.ReportToAuthority(context.Background(), txnUuid)
 	if err == nil {
 		t.Fatal("expected error from publisher, got nil")
 	}
@@ -144,7 +144,7 @@ func TestReportToAuthority_PartialFailure(t *testing.T) {
 		&log,
 	)
 
-	successCount, errorCount, err := svc.ReportToAuthority(context.Background(), txnUuid, "2026-03-01", "2026-03-31")
+	successCount, errorCount, err := svc.ReportToAuthority(context.Background(), txnUuid)
 	if err == nil {
 		t.Fatal("expected error for partial failure, got nil")
 	}

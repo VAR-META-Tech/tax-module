@@ -127,8 +127,7 @@ func TestViettelClient_CreateInvoice(t *testing.T) {
 		BaseURL:           server.URL + "/api",
 		AuthURL:           server.URL + "/auth/login",
 		CreateInvoicePath: "/InvoiceAPI/InvoiceWS/createInvoice",
-		SupplierCode:      "TAX123",
-		Username:          "u",
+		Username:          "TAX123",
 		Password:          "p",
 		Timeout:           5e9,
 	}
@@ -225,11 +224,10 @@ func TestViettelPublisher_CreateInvoice(t *testing.T) {
 		BaseURL:           server.URL + "/api",
 		AuthURL:           server.URL + "/auth/login",
 		CreateInvoicePath: "/InvoiceAPI/InvoiceWS/createInvoice",
-		SupplierCode:      "TAX123",
 		InvoiceType:       "1",
 		TemplateCode:      "01GTKT0/001",
 		InvoiceSeries:     "AA/22E",
-		Username:          "u",
+		Username:          "TAX123",
 		Password:          "p",
 		Timeout:           5e9,
 	}
@@ -281,8 +279,7 @@ func TestViettelPublisher_QueryStatus_Completed(t *testing.T) {
 		BaseURL:         server.URL + "/api",
 		AuthURL:         server.URL + "/auth/login",
 		QueryStatusPath: "/InvoiceAPI/InvoiceWS/searchInvoiceByTransactionUuid",
-		SupplierCode:    "TAX123",
-		Username:        "u",
+		Username:        "TAX123",
 		Password:        "p",
 		Timeout:         5e9,
 	}
@@ -324,8 +321,7 @@ func TestViettelPublisher_QueryStatus_Pending(t *testing.T) {
 		BaseURL:         server.URL + "/api",
 		AuthURL:         server.URL + "/auth/login",
 		QueryStatusPath: "/InvoiceAPI/InvoiceWS/searchInvoiceByTransactionUuid",
-		SupplierCode:    "TAX123",
-		Username:        "u",
+		Username:        "TAX123",
 		Password:        "p",
 		Timeout:         5e9,
 	}
@@ -399,8 +395,7 @@ func TestViettelClient_ReportToAuthorityByTransactionUuid(t *testing.T) {
 		BaseURL:       server.URL + "/api",
 		AuthURL:       server.URL + "/auth/login",
 		ReportToAuthorityPath: "/InvoiceAPI/InvoiceWS/sendInvoiceByTransactionUuid",
-		SupplierCode:  "TAX123",
-		Username:      "u",
+		Username:      "TAX123",
 		Password:      "p",
 		Timeout:       5e9,
 	}
@@ -449,8 +444,7 @@ func TestViettelPublisher_ReportToAuthority_Success(t *testing.T) {
 		BaseURL:       server.URL + "/api",
 		AuthURL:       server.URL + "/auth/login",
 		ReportToAuthorityPath: "/InvoiceAPI/InvoiceWS/sendInvoiceByTransactionUuid",
-		SupplierCode:  "TAX123",
-		Username:      "u",
+		Username:      "TAX123",
 		Password:      "p",
 		Timeout:       5e9,
 	}
@@ -502,8 +496,7 @@ func TestViettelPublisher_ReportToAuthority_PartialFailure(t *testing.T) {
 		BaseURL:       server.URL + "/api",
 		AuthURL:       server.URL + "/auth/login",
 		ReportToAuthorityPath: "/InvoiceAPI/InvoiceWS/sendInvoiceByTransactionUuid",
-		SupplierCode:  "TAX123",
-		Username:      "u",
+		Username:      "TAX123",
 		Password:      "p",
 		Timeout:       5e9,
 	}
@@ -522,6 +515,72 @@ func TestViettelPublisher_ReportToAuthority_PartialFailure(t *testing.T) {
 	}
 	if errorCount != 1 {
 		t.Errorf("errorCount = %d, want 1", errorCount)
+	}
+}
+
+func TestViettelClient_LoginWithCredentials(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/auth/login", func(w http.ResponseWriter, r *http.Request) {
+		var req AuthRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if req.Username != "custom_user" || req.Password != "custom_pass" {
+			t.Errorf("unexpected credentials: %s/%s", req.Username, req.Password)
+		}
+		json.NewEncoder(w).Encode(AuthResponse{AccessToken: "custom_tok", ExpiresIn: 7200})
+	})
+
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	log := zerolog.Nop()
+	cfg := config.ViettelConfig{
+		AuthURL:  server.URL + "/auth/login",
+		Username: "cfg_user",
+		Password: "cfg_pass",
+		Timeout:  5e9,
+	}
+
+	tokenRepo := newMemTokenRepo()
+	client := NewViettelClient(cfg, tokenRepo, &log)
+
+	expiresAt, err := client.LoginWithCredentials(context.Background(), "custom_user", "custom_pass")
+	if err != nil {
+		t.Fatalf("LoginWithCredentials: %v", err)
+	}
+	if expiresAt.IsZero() {
+		t.Error("expiresAt should not be zero")
+	}
+
+	// Token stored under provider name
+	stored, err := tokenRepo.Get(context.Background(), providerName)
+	if err != nil {
+		t.Fatalf("Get stored token: %v", err)
+	}
+	if stored.AccessToken != "custom_tok" {
+		t.Errorf("stored token = %q, want %q", stored.AccessToken, "custom_tok")
+	}
+}
+
+func TestViettelClient_LoginWithCredentials_Error(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(`{"error":"invalid credentials"}`))
+	}))
+	defer server.Close()
+
+	log := zerolog.Nop()
+	cfg := config.ViettelConfig{
+		AuthURL: server.URL + "/auth/login",
+		Timeout: 5e9,
+	}
+
+	client := NewViettelClient(cfg, newMemTokenRepo(), &log)
+
+	_, err := client.LoginWithCredentials(context.Background(), "bad_user", "bad_pass")
+	if err == nil {
+		t.Fatal("expected error for bad credentials, got nil")
 	}
 }
 

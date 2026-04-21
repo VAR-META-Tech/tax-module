@@ -66,7 +66,8 @@ func main() {
 
 	invoiceSvc := service.NewInvoiceService(invoiceRepo, publisher, enqueuer, &log)
 
-	router := handler.NewRouter(&log, dbPool, invoiceSvc, cfg.Provider.Default)
+	authHandler := handler.NewAuthHandler(viettelClient, misaClient, &log)
+	router := handler.NewRouter(&log, dbPool, invoiceSvc, cfg.Provider.Default, authHandler)
 
 	server := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Server.Port),

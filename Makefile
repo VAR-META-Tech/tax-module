@@ -31,7 +31,7 @@ clean:
 	rm -rf $(BUILD_DIR)
 
 # Database migrations
-MIGRATE_DSN ?= "postgres://taxmodule:secret@localhost:5432/tax_module?sslmode=disable"
+MIGRATE_DSN ?= "postgres://datpham:secret@localhost:5432/tax_module?sslmode=disable"
 MIGRATIONS_PATH=internal/repository/postgres/migrations
 
 migrate-up:

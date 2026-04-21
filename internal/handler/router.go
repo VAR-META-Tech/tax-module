@@ -12,7 +12,7 @@ import (
 )
 
 // NewRouter creates the Gin engine with all routes registered.
-func NewRouter(log *zerolog.Logger, dbPool *pgxpool.Pool, invoiceSvc *service.InvoiceService, defaultProvider string) *gin.Engine {
+func NewRouter(log *zerolog.Logger, dbPool *pgxpool.Pool, invoiceSvc *service.InvoiceService, defaultProvider string, authHandler *AuthHandler) *gin.Engine {
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(cors.New(cors.Config{
@@ -30,12 +30,13 @@ func NewRouter(log *zerolog.Logger, dbPool *pgxpool.Pool, invoiceSvc *service.In
 	// API v1
 	v1 := router.Group("/api/v1")
 	{
+		v1.POST("/auth/login", authHandler.Login)
+
 		invoices := v1.Group("/invoices")
 		{
 			invoices.POST("", inv.CreateInvoice)
 			invoices.GET("", inv.ListInvoices)
 			invoices.GET("/:id", inv.GetInvoice)
-
 
 			invoices.PATCH("/:id/payment", inv.UpdatePayment)
 			invoices.POST("/:id/submit", inv.SubmitInvoice)

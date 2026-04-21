@@ -79,7 +79,7 @@ func (p *ViettelPublisher) QueryStatus(ctx context.Context, invoice *domain.Invo
 	if invoice.TransactionUuid != nil {
 		transactionUuid = *invoice.TransactionUuid
 	}
-	resp, err := p.client.SearchByTransactionUuid(ctx, transactionUuid, p.cfg.SupplierCode)
+	resp, err := p.client.SearchByTransactionUuid(ctx, transactionUuid, p.client.cfg.Username)
 	if err != nil {
 		return "", "", nil, err
 	}
@@ -110,7 +110,7 @@ func (p *ViettelPublisher) QueryStatus(ctx context.Context, invoice *domain.Invo
 // The provider param is used by the dispatcher for routing and is ignored here.
 func (p *ViettelPublisher) ReportToAuthority(ctx context.Context, provider, transactionUuid, startDate, endDate string) (int, int, error) {
 	req := &ReportToAuthorityRequest{
-		SupplierTaxCode: p.cfg.SupplierCode,
+		SupplierTaxCode: p.client.cfg.Username,
 		TransactionUuid: transactionUuid,
 		StartDate:       startDate,
 		EndDate:         endDate,
@@ -159,7 +159,7 @@ func (p *ViettelPublisher) DownloadInvoiceFile(ctx context.Context, provider str
 		invoiceNo = *invoice.ExternalID
 	}
 	req := &GetInvoiceFileRequest{
-		SupplierTaxCode: p.cfg.SupplierCode,
+		SupplierTaxCode: p.client.cfg.Username,
 		InvoiceNo:       invoiceNo,
 		TemplateCode:    p.cfg.TemplateCode,
 		FileType:        fileType,
