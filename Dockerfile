@@ -18,6 +18,7 @@ WORKDIR /app
 
 COPY --from=builder /bin/tax-module .
 COPY --from=builder /app/.env.example .env.example
+COPY --from=builder /app/internal/repository/postgres/migrations ./migrations
 
 EXPOSE 8080
 
